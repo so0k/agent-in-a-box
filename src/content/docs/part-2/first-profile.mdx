@@ -1,0 +1,560 @@
+---
+title: "A first profile"
+description: "Profiles, packs and starters: write a profile, one setting at a time, until Claude Code starts inside a box."
+sidebar:
+  label: "A first profile"
+  order: 2
+  badge:
+    text: "Hands-on"
+    class: "aib-badge aib-badge-handson"
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+import { PartProgress, Pieces, CatchUp, Iteration, Command, Flag, Why, ReadMore, Expect, Seat } from '~/components';
+
+<PartProgress current="part-2/first-profile" />
+
+After this page you will know what a Box profile is, where it lives, what packs and starters are, and what `box run` does when you press Enter. You will write the profile by hand, one setting at a time, until Claude Code starts inside a box. The story needs it now because every later act, from b1 to c, runs on this one profile, grown a little on each page.
+
+<CatchUp>
+
+No Box profile exists yet. The only file you have is the MCP configuration you wrote during set-up, in your workspace.
+
+```json title="$HOME/leaderboard-ops/cloudflare-code-mode.json"
+{
+  "mcpServers": {
+    "cloudflare": {
+      "type": "http",
+      "url": "https://mcp.cloudflare.com/mcp",
+      "headers": { "Authorization": "Bearer ${CLOUDFLARE_MCP_TOKEN}" }
+    }
+  }
+}
+```
+
+</CatchUp>
+
+<Pieces stage={2} />
+
+The picture is the one from the previous page: the box, the agent's sandbox inside it, and the trusted process with the box CLI and Box Core, the stand-in secrets and the egress gateway. This page builds two of those pieces in practice: the box CLI and Box Core, which you drive with `box run`, and the contained filesystem view, which your profile decides.
+
+## The words this page uses
+
+Five words come up on every Box page. Here is each one, once, with the folder it lives in. In output on this site your home folder is written as `~`; Box prints the full path.
+
+- **Box home.** The folder where the box CLI keeps everything it writes. You set it in set-up with `BOX_HOME="$HOME/box-ws"`. Without it, Box uses `~/.strands/box`.
+- **Profile.** One file, `profile.toml`, that says how the box is set up for one agent: what runs, what it may reach, which secrets it gets, and which policy files apply. It lives in `$BOX_HOME/profiles/<name>/`. The Box docs put it this way: a profile "names packs for the details and holds only your choices".
+- **Pack.** A reusable piece of profile, kept in its own `pack.toml`. A pack "holds what one program needs in a box: how to start it, where its settings are, and which hosts it reaches". Box ships packs named `@box/<name>`. A profile lists the packs it uses, and Box merges them in order, with the profile last.
+- **Storage.** The folders the agent keeps between runs, in `$BOX_HOME/storage/<profile>/default/agent/`. Claude Code's settings and sessions will live here, not in your own `~/.claude`.
+- **Run.** One `box run`. Each run gets its own box, an ID such as `b-e4d0f0dc5f9bfc35`, and a run folder `$BOX_HOME/r/<box ID>/` with the files Box generated for that run and its records.
+
+At the end of this page your Box home looks like this:
+
+<FileTree>
+
+- box-ws/
+  - profiles/
+    - ws/
+      - **profile.toml** the file you write on this page
+  - storage/
+    - ws/
+      - default/
+        - agent/
+          - config/ Claude Code's own configuration, kept between runs
+          - tmp/ Claude Code's temporary folder
+  - r/
+    - b-&lt;16&nbsp;hex&gt;/ one folder per run
+      - box.toml Box Core's configuration, generated from the profile
+      - policy.dw the run's rules, generated
+      - profile-name
+      - records.jsonl the run's records
+      - box/ Box Core's state for the run
+
+</FileTree>
+
+The run folder layout is from the Box docs (`docs/cli/files.md`) and was checked by listing a run folder on this build.
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/how-box-works.md" source="Box docs">How Box works: profiles, packs and the box</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/files.md" source="Box docs">Where Box keeps its files</ReadMore>
+
+## Packs and starters, and why we write the profile by hand
+
+A **starter** is the list of questions `box profile create` asks. Your answers become a profile, and "the profile never refers to the starter again". Box ships three starters: `claude`, `codex` and `kiro`.
+
+The `claude` starter builds on the pack `@box/claude`. That pack runs Claude Code well, and it does one thing this workshop cannot accept: at the first run it copies parts of your own `~/.claude` into the box's storage. Some copies can be switched off (skills, settings, app state, memory, some variables). Others cannot: CLAUDE.md, rules, commands, agents, output styles, themes and keybindings are copied with no switch to turn them off (source: `resources/packs/claude/README.md` and `pack.toml`).
+
+This workshop never lets your Claude Code configuration into a box. Every act runs Claude Code with an empty configuration, so the numbers compare and nothing personal leaks into a run. So we do not use the starter or `@box/claude`. We write the profile by hand. That is also the best way to learn what each line does.
+
+<Seat who="security">
+A profile that imports `~/.claude` brings in whatever hooks, rules and MCP settings a developer has collected. A hand-written profile holds only what you can read on one screen.
+</Seat>
+<Seat who="developer">
+The shipped pack is the quick start for daily use. Here you give that up to see every setting the pack would have made for you.
+</Seat>
+
+<Iteration n={1} title="Ask the CLI first">
+
+**What we do.** Before writing anything, ask Box what it has.
+
+<Command what="Lists your profiles and the starters Box ships.">
+
+```sh
+box profile list
+```
+
+<Flag name="list">Prints every profile in `$BOX_HOME/profiles` with its packs, then the starters. It changes nothing.</Flag>
+
+</Command>
+
+**What we see.** No profiles yet, and the three starters.
+
+<Expect>
+
+```text
+box: Profiles
+
+No profiles in ~/box-ws/profiles. Create one from a starter: `box profile create <starter>`.
+Starters:
+  claude  Claude Code
+  codex   Codex
+  kiro    Kiro CLI
+```
+
+</Expect>
+
+Could `box profile create` make a profile without the `claude` starter? Try it with only the Anthropic pack:
+
+<Command what="Asks Box to create a profile named ws from one pack and the locked policy starter.">
+
+```sh
+box profile create ws --with @box/anthropic --policy locked
+```
+
+<Flag name="ws">The profile's name. It becomes the folder `$BOX_HOME/profiles/ws/`. We use a short name because you type it in every command.</Flag>
+<Flag name="--with @box/anthropic">The packs to use. `@box/anthropic` is the shipped pack that declares the route to the Anthropic API. The `@box/` prefix matters: without it, Box looks for a pack of your own named `anthropic` and fails with `the pack "anthropic" does not exist`.</Flag>
+<Flag name="--policy locked">Which policy starter to copy into the profile. `locked` gives the project read-only access and permits almost nothing. Without the flag and without a terminal, Box stops and asks which policy to use.</Flag>
+
+</Command>
+
+**What we see.** Box refuses, and writes nothing (exit 1).
+
+<Expect variant="refuse">
+
+```text
+box: error: ~/box-ws/profiles/ws/profile.toml: no pack runs an agent; name an agent pack with `--with`, or name the profile after a starter (`box profile list` lists them)
+```
+
+</Expect>
+
+<Why>
+A profile must run one agent, and the only pack that runs Claude Code is `@box/claude`, which imports your configuration. So the profile is written by hand from here on.
+
+<Fragment slot="alternative">
+`box profile create claude` would ask its questions and write a profile on `@box/claude`. It asks about importing MCP servers and hooks (both default to no), but it does not ask about the other copies, which happen silently at the first run. The CLI offers no "empty profile" command either; both gaps are listed in [Builds and gaps](/results/builds-and-gaps/).
+</Fragment>
+</Why>
+
+</Iteration>
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/starters.md" source="Box docs">Starters</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles.md" source="Box docs">Profiles</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/resources/packs/claude/README.md" source="Box docs">The @box/claude pack and what it imports</ReadMore>
+
+<Iteration n={2} title="An empty profile">
+
+**What we add.** The profile's folder, and an empty `profile.toml` in it.
+
+<Command what="Creates the profile's folder in your Box home.">
+
+```sh
+mkdir -p "$BOX_HOME/profiles/ws"
+```
+
+<Flag name="-p">Creates the parent folders too, and does not complain if the folder exists.</Flag>
+<Flag name='"$BOX_HOME/profiles/ws"'>The folder name is the profile name. Box finds a profile by this folder.</Flag>
+
+</Command>
+
+Now create the file `$BOX_HOME/profiles/ws/profile.toml` in your editor and leave it empty. Then ask Box what it makes of it:
+
+<Command what="Resolves the profile for the current folder and prints what a run would get. It starts no box.">
+
+```sh
+box profile show ws
+```
+
+<Flag name="ws">The profile to show.</Flag>
+
+</Command>
+
+**What we see.**
+
+<Expect variant="refuse">
+
+```text
+box: error: ~/box-ws/profiles/ws/profile.toml: missing field `agent`
+```
+
+</Expect>
+
+A profile must say what runs. `box profile show` is the check you run after every change: it reads the profile and its packs, fills in the placeholders, checks the policy as `box run` would, and prints the result. It starts nothing and writes no run files.
+
+</Iteration>
+
+<Iteration n={3} title="The agent">
+
+**What we add.** The `[agent]` table: the program Box starts inside the box.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml"
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+```
+
+- `[agent]` is the agent's table. Everything about the program the box runs goes in it or in its sub-tables.
+- `command` is a list of arguments, not a line of shell text. Box runs the first element as the program, with the others as its arguments. Nothing is expanded by a shell.
+- `${{ home }}` is a Box placeholder for your home folder. Box fills it in when it resolves the profile. `~/.local/bin/claude` is where Claude Code's native installer puts its link.
+- `{ slot = "agent-args" }` marks where extra arguments go: everything you type after `--` on `box run` is placed here.
+
+<Why>
+We name the link `~/.local/bin/claude`, not the versioned binary, so the profile keeps working when Claude Code updates. Box follows the link: its startup report names the real file, `~/.local/share/claude/versions/2.1.330`.
+
+<Fragment slot="alternative">
+Write the versioned path itself, for example `${{ home }}/.local/share/claude/versions/2.1.330`. It works, and breaks at the next update.
+</Fragment>
+</Why>
+
+**The run.** Start the box and ask Claude Code only for its version.
+
+<Command what="Runs the profile ws in the current folder and passes --version to Claude Code.">
+
+```sh
+box run ws --no-banner -- --version
+```
+
+<Flag name="run ws">Runs the profile `ws`. The folder you are in (`~/leaderboard-ops`) becomes the run's project.</Flag>
+<Flag name="--no-banner">Turns off Box's activity banner, the one-line status Box draws under the agent. Headless runs and short checks do not need it. Leave it out in interactive acts to watch decisions live.</Flag>
+<Flag name="--">Ends `box`'s own options. Everything after it goes to Claude Code unchanged, at the `agent-args` slot.</Flag>
+<Flag name="--version">A Claude Code flag: print the version and exit. It needs no model, no key and no network, so it tests only that the box can start the program.</Flag>
+
+</Command>
+
+**What we see** (shortened where marked with `...`):
+
+<Expect>
+
+```text
+box: profile ws gives the agent no access to this project; to allow it, add `[project] access = "write"` to ~/box-ws/profiles/ws/profile.toml
+box: running profile ws with box ID b-e4d0f0dc5f9bfc35 (records: ~/box-ws/r/b-e4d0f0dc5f9bfc35/records.jsonl)
+box: to reuse this box run: box run ws --box-id b-e4d0f0dc5f9bfc35
+box: policy history: box runs history b-e4d0f0dc5f9bfc35
+strands-box: box b-e4d0f0dc5f9bfc35 created · config ~/box-ws/r/b-e4d0f0dc5f9bfc35/box.toml
+strands-box: starting workload
+strands-box: [agent] runs ~/.local/share/claude/versions/2.1.330 with no policy decision over these paths:
+  (no filesystem entry)
+  exec        ~/.local/share/claude/versions/2.1.330  (command, implicit)
+strands-box: [agent] runtime minimum, added by Core:
+  read        /usr/share/icu ... /System/Library ... /dev/null ...
+  enter       ~/leaderboard-ops  (workspace, entry only)
+strands-box: [agent] HOME=~ PATH=~/box-ws/r/b-.../box/bin:<the whole PATH of your shell>
+2.1.330 (Claude Code)
+```
+
+</Expect>
+
+Your box ID will differ: every run gets a new one. Read the output from the top:
+
+- Lines starting `box:` come from the box CLI. It found the profile, made a run with a new box ID, and told you where the records are and how to read the run's decisions later.
+- Lines starting `strands-box:` come from Box Core, the engine the CLI starts. Its startup report says what the agent's process can reach **without** a policy decision: here, only the right to execute its own binary. Core adds a runtime minimum of system paths every program needs, and the right to enter the project folder, but not to read it.
+- The last line is Claude Code itself, running inside the box.
+
+Note what was not needed: a `read` grant on the binary. The old launcher of this kit granted it; this build ran Claude Code without one.
+
+</Iteration>
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference: [agent], command and placeholders</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/cli.md" source="Box docs">The box CLI: box run and its flags</ReadMore>
+
+## What happens when you press Enter on box run
+
+That one command did a lot. In order (from the Box docs, `docs/cli/cli.md` and `docs/cli/how-box-works.md`, and the output above):
+
+1. **Find the profile.** `box` looks for `ws` in `$BOX_HOME/profiles/`. (A value with a `/` or ending in `.toml` is read as a path to a profile file instead.)
+2. **Resolve it.** `box` reads `profile.toml` and each pack it names, merges them (packs left to right, the profile last), fills in placeholders such as `${{ home }}`, and checks the policy. A mistake stops here with `box: error:` and leaves no run folder. This is the same work `box profile show` does.
+3. **Copy files into storage** on the profile's first run, if a pack asks for copies. Our profile asks for none.
+4. **Create the run.** A new box ID, a run folder `$BOX_HOME/r/<box ID>/`, and in it the generated `box.toml` (Box Core's configuration) and `policy.dw` (the run's rules). `box` prints the ID and the records path.
+5. **Start Box Core.** Core creates the box and its trusted process: the policy engine, the egress gateway, and the vault that holds real secrets. It makes a stand-in for each declared secret, builds the operating system sandbox (on macOS, Seatbelt), prints its startup report, and starts the agent's `command` in the sandbox.
+6. **Pass your arguments.** Everything after `--` is added at the `agent-args` slot. Box does not read or change them.
+7. **Wait.** Core runs until the agent exits, and `box run` exits with the agent's status. The run folder stays until you clean it up.
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/how-box-works.md" source="Box docs">How Box works</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/architecture.md" source="Box docs">Architecture: the agent's sandbox and the trusted process</ReadMore>
+
+## Run Claude Code for real
+
+`--version` proved the box can start the program. Now give Claude Code a real task, and fix what it lacks, one setting at a time.
+
+From here on every iteration uses the same **free check**: a run that sets the model key to an invalid value for that one command. Claude Code starts, reaches its first model call, gets refused by Anthropic, and exits. Nothing is billed.
+
+<Iteration n={4} title="Project access">
+
+**The run.** The free check.
+
+<Command what="Starts Claude Code in the box for one headless turn, with an invalid model key so nothing is billed.">
+
+```sh
+ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key box run ws --no-banner -- --bare -p "Say hello." \
+  --max-turns 1 --model claude-sonnet-5-5 < /dev/null
+```
+
+<Flag name="ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key">A `NAME=value` prefix changes the variable for this one command only. The value is not a real key, so the first model call fails and costs nothing. This check has no money cap of its own, so never drop the prefix from it.</Flag>
+<Flag name="--bare">Claude Code's minimal mode: no hooks, plugins, auto-memory, CLAUDE.md discovery, or keychain reads; the key comes only from `ANTHROPIC_API_KEY`. It keeps your own Claude Code set-up out of the box.</Flag>
+<Flag name='-p "Say hello."'>Headless mode: one task, then exit. A greeting needs no tools.</Flag>
+<Flag name="--max-turns 1">Stop after one model turn: a hard stop.</Flag>
+<Flag name="--model claude-sonnet-5-5">Pins the model, so every run on this site uses the same one.</Flag>
+<Flag name="< /dev/null">Gives Claude Code empty input. Without it, a headless Claude Code waits 3 seconds for input and prints a warning.</Flag>
+<Flag name="\">Continues the command on the next line. It is still one command.</Flag>
+
+</Command>
+
+**What we see.** Claude Code prints, and exits 1:
+
+<Expect variant="refuse">
+
+```text
+Can't read the current directory (EPERM). Start Claude Code from a different directory.
+```
+
+</Expect>
+
+`EPERM` is the operating system's "operation not permitted". The sandbox let the agent enter the project folder but not read it, which is what Box's first line warned about.
+
+**What we add.** Project access, read only.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={1-2}
+[project]
+access = "read"
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+```
+
+The **project** is the folder `box run` starts in, here `~/leaderboard-ops`. `[project] access` decides how much of it the agent, its tools and its MCP servers reach. Box also writes matching rules for the box's own shell (`project_read`). With the line in place, each run prints:
+
+```text
+box: the agent can read but not change this project (`[project] access = "read"` in ~/box-ws/profiles/ws/profile.toml)
+```
+
+<Why>
+Operating the leaderboard app needs no file changes in the operations folder: the agent's work is reading Cloudflare. So it gets the least access that works.
+
+<Fragment slot="alternative">
+`"write"` lets the agent read, change, delete and move files in the project; it is what Box's note suggests and what the kit's old launcher used. `"none"` gives no access at all; the agent still starts there.
+</Fragment>
+</Why>
+
+</Iteration>
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference: [project]</ReadMore>
+<ReadMore href="https://code.claude.com/docs/en/cli-reference" source="Claude Code docs">Claude Code CLI reference</ReadMore>
+
+<Iteration n={5} title="A temporary folder">
+
+**The run.** The same free check. **What we see:**
+
+<Expect variant="refuse">
+
+```text
+EPERM: operation not permitted, open '/tmp/claude-502'
+```
+
+</Expect>
+
+Claude Code wants a temporary folder under `/tmp` (the number is your user ID). The sandbox grants nothing there.
+
+**What we add.** A storage folder for temporary files, and a variable that tells Claude Code to use it.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={4-5,10-11}
+[project]
+access = "read"
+
+[storage]
+directories = ["tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+```
+
+- `[storage] directories` names folders the agent keeps between runs. `"tmp"` becomes `~/box-ws/storage/ws/default/agent/tmp`, which the agent may read and write.
+- `${{ storage.tmp }}` is the placeholder for that folder's full path.
+- `[agent.env]` is the agent's **whole** environment. The agent inherits nothing from your shell, except what Box itself sets. `CLAUDE_CODE_TMPDIR` is Claude Code's variable for its temporary folder.
+
+<Why>
+A storage folder belongs to this profile alone, and Box already knows to grant it to the agent. Nothing else on the machine shares it.
+
+<Fragment slot="alternative">
+A write grant on `/tmp` itself, in `[agent.filesystem]`. That folder is shared with every program on the machine, so the agent could read and write other programs' files there.
+</Fragment>
+</Why>
+
+</Iteration>
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference: [storage] and [agent.env]</ReadMore>
+
+<Iteration n={6} title="Claude Code's own configuration">
+
+**The run.** The same free check. **What we see:**
+
+<Expect variant="refuse">
+
+```text
+These settings did not load, so nothing in them is in effect, including hooks, permission rules and sandbox settings, though environment variables they already set can stay:
+  ~/.claude/settings.json: Settings file could not be read: EPERM: operation not permitted, stat '~/.claude/settings.json'
+Fix each problem listed, then start Claude Code again. ...
+Not logged in · Please run /login
+```
+
+</Expect>
+
+This refusal is good news for both seats. Box set the agent's `HOME` to your home folder, but granted nothing in it, so the sandbox refused Claude Code even a look (`stat`) at your real `~/.claude/settings.json`. Your configuration cannot leak in.
+
+Claude Code still needs a configuration folder of its own. Give it one in storage.
+
+**What we add.** A second storage folder, and the variable that points Claude Code at it.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={5,11}
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+```
+
+Line 5 changed: `"config"` was added. `CLAUDE_CONFIG_DIR` is Claude Code's variable for the folder that holds its settings, `.claude.json`, sessions and transcripts.
+
+**What we see after the change.** Only:
+
+<Expect>
+
+```text
+Not logged in · Please run /login
+```
+
+</Expect>
+
+The settings error is gone. Storage now holds `agent/config/.claude.json`, `projects/`, `sessions/` and more: an empty Claude Code configuration that belongs to this profile and survives between runs. "Not logged in" is the next page's problem: the model key does not reach the agent.
+
+<Why>
+An empty configuration in storage keeps every act comparable and keeps the developer's own `~/.claude` out of the box.
+
+<Fragment slot="alternative">
+The `@box/claude` pack sets the same two variables, and also copies parts of `~/.claude` into this folder (see iteration 1).
+</Fragment>
+</Why>
+
+</Iteration>
+
+<Iteration n={7} title="The base pack">
+
+**What we add.** One pack, as the first line of the file.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={1}
+packs = ["@box/base"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+```
+
+`packs` is a top-level key. Top-level keys (`packs`, `policies` and a few others) must come before the first `[table]`; after a table starts, every key belongs to that table.
+
+`@box/base` is a small support pack that every shipped agent pack builds on. It sets three variables for the agent: `TERM` and `COLORTERM` (taken from your shell, with defaults) and a fixed `PATH=/usr/bin:/bin`. It grants nothing else.
+
+**The run.** The same free check. **What we see:** the same `Not logged in`, and one changed line at the end of Box Core's startup report. Before:
+
+```text
+strands-box: [agent] HOME=~ PATH=~/box-ws/r/b-.../box/bin:<the whole PATH of your shell>
+```
+
+After:
+
+```text
+strands-box: [agent] HOME=~ PATH=~/box-ws/r/b-.../box/bin:/usr/bin:/bin
+```
+
+The `box/bin` folder at the front is Box's own: it holds the aliases Box uses to start MCP servers (Part 5).
+
+<Why>
+Without the pack, the agent's `PATH` was your shell's whole `PATH`, so the agent could find every program you can. With it, the agent sees only the system folders.
+
+<Fragment slot="alternative">
+Set `PATH`, `TERM` and `COLORTERM` yourself in `[agent.env]`. The pack does the same in one line, and you can read it: `resources/packs/base/pack.toml` in the Box repository.
+</Fragment>
+</Why>
+
+Now `box profile show ws` resolves:
+
+<Expect variant="permit">
+
+```text
+box: Profile ws
+
+✓ Resolves for this directory
+  packs     @box/base 1
+  storage   ~/box-ws/storage/ws/default
+  project   read only
+
+Options
+  terminal.colorterm  "truecolor"  (env:COLORTERM)
+  terminal.term       "xterm-256color"  (env:TERM)
+
+Full configuration: box profile show ws --full
+```
+
+</Expect>
+
+The `1` after `@box/base` is the pack's version. The options are the pack's inputs and where their values came from (`env:TERM` means "your shell's `TERM`"). Which `terminal.colorterm` line you see depends on your shell: if it does not set `COLORTERM`, the line ends in `(default)` instead of `(env:COLORTERM)`.
+
+</Iteration>
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/packs.md" source="Box docs">Packs</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/resources/packs/base/pack.toml" source="Box docs">The @box/base pack, the whole file</ReadMore>
+
+## The two seats
+
+<Seat who="security">
+The agent now runs in a sandbox that reaches its own binary, two storage folders and a read-only project, and nothing else of the home folder. File refusals such as the `EPERM` above come from the operating system sandbox, not from a policy rule, so they leave **no** row in the run's decision history; you only see them in the agent's own error output (a gap, listed in [Builds and gaps](/results/builds-and-gaps/)).
+</Seat>
+<Seat who="developer">
+Claude Code starts, but cannot work yet: it has no model key and no network. Each setting cost one short run to find. The profile is 14 lines, and every line is one you can explain.
+</Seat>
+
+## What to remember
+
+- A **profile** is one hand-written `profile.toml` in `$BOX_HOME/profiles/<name>/`. A **pack** is a reusable piece of profile; a **starter** is the question list that writes a profile, and is never read again.
+- `[agent] command` is an argument list, and `{ slot = "agent-args" }` is where your `--` arguments go.
+- The agent inherits nothing: no files beyond its grants, no variables beyond `[agent.env]`.
+- **Storage** keeps the agent's own folders between runs; each **run** gets a new box ID and a run folder.
+- `box profile show` checks a profile without starting anything. Run it after every change.
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/files.md" source="Box docs">Where Box keeps its files</ReadMore>
+<ReadMore href="/part-2/what-box-contains/" source="This workshop">What a sandbox contains</ReadMore>

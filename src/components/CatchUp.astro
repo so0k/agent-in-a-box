@@ -1,0 +1,42 @@
+---
+/**
+ * A collapsed "your files at this point" block with the complete files,
+ * so a reader who is lost can paste them into an editor. Put one editor-frame
+ * code block per file inside (title = the file's path).
+ *
+ * Usage (MDX):
+ *   <CatchUp>
+ *   ```toml title="$HOME/box-ws/profiles/workshop/profile.toml"
+ *   ...
+ *   ```
+ *   </CatchUp>
+ */
+interface Props {
+	/** Optional summary text. */
+	title?: string;
+}
+const { title = 'Your files at this point' } = Astro.props;
+---
+
+<details class="aib-catchup">
+	<summary>{title}</summary>
+	<div class="aib-catchup-body"><slot /></div>
+</details>
+
+<style>
+	.aib-catchup {
+		margin-top: 1.25rem;
+		border: 1px solid var(--aib-outline);
+		border-radius: var(--aib-radius);
+		background: var(--aib-panel-bg);
+	}
+	.aib-catchup summary {
+		cursor: pointer;
+		padding: 0.6rem 1rem;
+		font-weight: 600;
+		color: var(--sl-color-white);
+	}
+	.aib-catchup-body {
+		padding: 0.25rem 1rem 1rem;
+	}
+</style>

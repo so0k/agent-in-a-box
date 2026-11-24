@@ -1,0 +1,286 @@
+---
+title: "Requirements"
+description: "What you need before you start, with a command to check each item."
+sidebar:
+  label: "Requirements"
+  order: 4
+---
+
+import { PartProgress, Pieces, Command, Flag, Expect, ReadMore } from '~/components';
+import { Aside } from '@astrojs/starlight/components';
+
+<PartProgress current="start/requirements" />
+
+This page lists what you need to run the acts yourself, with one command to check each item. You only need all of it to run the acts; to follow the explanations, a browser is enough, because every page shows the real output of the runs made for this workshop.
+
+<Pieces stage={1} caption="Everything on this picture is something you need: a Mac with a terminal and a keychain, Claude Code, an Anthropic API key, and a Cloudflare account with an app on it." />
+
+Nothing is new in the picture yet. This page is about the pieces of stage 1 and the box CLI that Part 2 adds.
+
+## What was used to write this site
+
+Every check below was run on one machine on 2026-11-22: macOS 26.7.1 on Apple silicon, Claude Code 2.1.330, Node 22.23.4, and the local box build described below. Other versions were not checked.
+
+## A Mac with Apple silicon
+
+Box supports macOS on Apple silicon. On macOS it uses Seatbelt, the operating system's own process sandbox.
+
+<Command what="Prints the processor architecture of this terminal.">
+
+```sh
+uname -m
+```
+
+<Flag name="-m">Prints only the machine hardware name. A terminal running under Rosetta (Apple's translator for Intel programs) prints `x86_64` even on Apple silicon; run Box from a terminal that prints `arm64`.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+arm64
+```
+
+</Expect>
+
+<Command what="Prints the macOS version.">
+
+```sh
+sw_vers -productVersion
+```
+
+<Flag name="-productVersion">Prints only the version number.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+26.7.1
+```
+
+</Expect>
+
+The box build used here was compiled for macOS 15.0 and later (`MACOSX_DEPLOYMENT_TARGET=15.0` in its build record). It was run on macOS 26.7.1 only; earlier versions were not checked.
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/macos-requirements.md" source="Box docs">macOS requirements</ReadMore>
+
+## The box CLI: a local build
+
+This workshop needs one fix to the box CLI that is not in a released Box yet. Without it, Box refuses every tool of Cloudflare's one-tool-per-operation server in Part 4, because 441 of its 3,053 tools describe their arguments in ways Box could not read ([Builds and gaps](/results/builds-and-gaps/)). So the site uses **one local build**, made from the public Box source (`strands-agents/box` main at commit `c70fec5`) plus that fix. The fix is published as the branch `bugfix/mcp-shared-definitions-workshop` of the fork `so0k/box`, in a later round than the one the site was measured on ([Set-up](/start/setup/) says what that means). Upstream release v0.3.0 and upstream main still have the bug as of 2026-11-24. It prints `box 0.1.0`; that version string is not stamped for local builds and does not mean an old release.
+
+The site assumes the build sits in `$HOME/box-build`: the `box` binary, its two helper programs `strands-box-sock-alias` and `strands-box-contain-trampoline`, and a `resources/` folder beside them. [Set-up](/start/setup/#build-the-box-cli-from-source) has the build commands, and [Builds and gaps](/results/builds-and-gaps/) explains the build and everything a released Box still lacks.
+
+<Command what="Runs the workshop's box build and prints its version.">
+
+```sh
+"$HOME/box-build/box" --version
+```
+
+<Flag name="$HOME/box-build/box">The full path to the build, so that another `box` on your `PATH` (an installed release, for example) is not the one that answers.</Flag>
+<Flag name="--version">Prints the version and exits.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+box 0.1.0
+```
+
+</Expect>
+
+## Claude Code
+
+Claude Code is the agent in every act. The profile you write in Part 2 starts it from `~/.local/bin/claude`, which is where Anthropic's native installer puts it. If yours is elsewhere, you change one path in the profile.
+
+<Command what="Prints the path of the claude command your shell finds.">
+
+```sh
+command -v claude
+```
+
+<Flag name="-v">Prints the path the shell would run for `claude`, without running it.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+<your-home>/.local/bin/claude
+```
+
+`<your-home>` stands for your home folder, the value of `$HOME`, here and in later outputs.
+
+</Expect>
+
+<Command what="Prints Claude Code's version.">
+
+```sh
+claude --version
+```
+
+<Flag name="--version">Prints the version and exits; it makes no model call.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+2.1.330 (Claude Code)
+```
+
+</Expect>
+
+Your own Claude Code settings, memory and MCP servers are never used: every act runs Claude Code with an empty, throwaway configuration. The acts explain the flags that do this.
+
+<ReadMore href="https://code.claude.com/docs/en/cli-reference" source="Claude Code docs">Claude Code CLI reference</ReadMore>
+
+## Node 22, for the local MCP server in Part 5
+
+Part 5 runs a small MCP server inside the box, the local exec proxy. It is a Node program. The profile names the Node installation by its full path, because inside the box the agent's `PATH` does not include your Node. This site uses Node 22.23.4 installed with mise, a tool version manager; any other installation works if you change the path in the profile (not checked).
+
+<Command what="Prints the folder of the Node 22 installation that mise manages.">
+
+```sh
+mise where node@22
+```
+
+<Flag name="where">Prints the install folder of a tool version, without running it.</Flag>
+<Flag name="node@22">The tool and the version to look for: the newest installed Node 22.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+<your-home>/.local/share/mise/installs/node/22.23.4
+```
+
+</Expect>
+
+<ReadMore href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools" source="MCP specification">MCP tools: how a server offers tools</ReadMore>
+
+## The exec proxy repository, for Part 5
+
+The local exec proxy lives in the public repository [so0k/box-exec-proxy](https://github.com/so0k/box-exec-proxy), in `proxy/`. The site assumes a copy at `$HOME/box-exec-proxy`. The Cloudflare API description the proxy searches, `spec/spec.json`, is not in the repository: the repository's script `tools/fetch-spec.sh` downloads it. The commands in this section were not run for this site.
+
+<Command what="Downloads the exec proxy repository into your home folder.">
+
+```sh
+git clone https://github.com/so0k/box-exec-proxy.git "$HOME/box-exec-proxy"
+```
+
+<Flag name="https://github.com/so0k/box-exec-proxy.git">The public repository of the local exec proxy.</Flag>
+<Flag name='"$HOME/box-exec-proxy"'>The folder to clone into. Part 5's profiles use this path.</Flag>
+
+</Command>
+
+<Command what="Downloads Cloudflare's public API description and prepares it for the proxy's search tool. It runs outside the box and needs no credentials.">
+
+```sh
+bash "$HOME/box-exec-proxy/tools/fetch-spec.sh"
+```
+
+<Flag name="bash">Runs the script with bash, whether or not the file is marked executable.</Flag>
+<Flag name="tools/fetch-spec.sh">Downloads `openapi.forge.json` from a pinned release of `cloudflare/forge`, the release the kit scenarios in box-exec-proxy were generated from. It saves the file as `openapi.json` in the repository's `spec/` folder, records the address it used in `spec/SOURCE`, and runs `tools/process-spec.js` to write `spec.json` and `products.json` next to it. It needs curl and mise, because it runs Node 22 through `mise x node@22`.</Flag>
+
+</Command>
+
+To take the newest forge release instead, run the script as `SPEC_URL=latest bash "$HOME/box-exec-proxy/tools/fetch-spec.sh"`: it asks GitHub which release is the newest and downloads that release's file. Any other value of `SPEC_URL` is used as the address to download. A different release can give a different API description from the one the kit scenarios were generated from; that difference was not checked.
+
+<Command what="Lists the proxy's start file and the API description it reads.">
+
+```sh
+ls "$HOME/box-exec-proxy/proxy/exec-proxy" "$HOME/box-exec-proxy/spec/spec.json"
+```
+
+<Flag name="proxy/exec-proxy">The program that starts the local exec proxy.</Flag>
+<Flag name="spec/spec.json">Cloudflare's API description, which the proxy's `search` tool reads.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+<your-home>/box-exec-proxy/proxy/exec-proxy
+<your-home>/box-exec-proxy/spec/spec.json
+```
+
+</Expect>
+
+## An Anthropic API key
+
+Claude Code calls the Anthropic API with an API key. The acts are paid runs on that key. Each act page says what one run cost when it was measured; the most expensive measured run cost USD 0.2357 (act b3, see [Measurements](/results/measurements/)), and every headless run in this workshop carries a cap of USD 0.25. Interactive runs have no money cap in Claude Code.
+
+You store the key in the keychain in [set-up](/start/setup/), and the check is there. Whether the key works shows at the first real run; the free checks deliberately use an invalid key.
+
+## A Cloudflare account and two API tokens
+
+The agent works on a Cloudflare account through API tokens. A **user API token** is a token you create in the Cloudflare dashboard under your user profile; it carries a list of permissions and can be restricted to one account.
+
+The workshop uses two tokens with nearly the same permissions:
+
+| Token | Used for | Permissions |
+|---|---|---|
+| The **MCP token** (`box-poc-mcp` in the worked example) | Cloudflare's remote MCP server, in acts a to b3-args | Workers Scripts Write, Workers Tail Read, Workers Observability Read, Workers Observability Write, D1 Write, Workers KV Storage Write, Account Settings Read, **User Details Read** |
+| The **agent token** (`box-poc-agent`) | Direct calls to the Cloudflare API from inside the box, in act c | The same list without User Details Read |
+
+Both are restricted to the one account. In the worked example they expire on 2026-12-13.
+
+### Why the tokens are broad
+
+Both tokens can do everything the security engineer wants to refuse: read the logs, live-tail, run SQL, delete the Worker, delete KV data. That is on purpose. When an act refuses an operation, you know the refusal came from Box's policy, not from Cloudflare's token check.
+
+### Why there are two
+
+Cloudflare's remote MCP server accepts a user token only if both `GET /user` and `GET /accounts` answer. `GET /user` needs User Details Read. The agent token lacks it, and the server refused that token when it connected (403 `insufficient_scope`, recorded in the author's measurement notes, not published). The MCP token adds User Details Read and leaves the agent token unchanged. Apart from that one permission the two match: whatever the vendor's server can do with the MCP token, the local exec proxy can do with the agent token.
+
+A third token exists in the worked example, a deploy token for the app's owner. The agent never gets it, and you do not need it.
+
+### Check
+
+You store both tokens in the keychain in [set-up](/start/setup/). The MCP token is checked by act a's free check: Claude Code reports the server as `"status":"connected"` only if the server accepted the token. The agent token is first used in act c; no separate check was written for it.
+
+<ReadMore href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/" source="Cloudflare docs">Create an API token</ReadMore>
+
+## The sample app (only to run the acts)
+
+The tasks read the Worker `box-poc-workshop` of [the sample app](/start/the-sample-app/): its list entry and its deployments. Its source is in [box-exec-proxy/sample-app](https://github.com/so0k/box-exec-proxy/tree/main/sample-app). You need the app, or a Worker of your own in its place, only to run the acts yourself. You can follow every explanation without it. This site does not teach how to deploy it.
+
+The check is act a's allowed task: its answer lists the Workers on the account, and yours should be among them.
+
+## The account id in the examples
+
+The worked example uses the Cloudflare account id `0123456789abcdef0123456789abcdef`, a stand-in for the real account the site was measured on, and the Worker `box-poc-workshop`. They were verified on that real account only. With your own account, replace them in these places:
+
+| Where | What to change | First appears in |
+|---|---|---|
+| The two task sentences, and the steering sentences of Part 4 | The account id and the Worker name | [Act a](/part-1/act-a/) |
+| The argument rule of act b3-args | The account id the rule allows | [Act b3-args](/part-4/act-b3-args/) |
+| The profile's `CLOUDFLARE_ACCOUNT_ID` for the local exec proxy | The account id | [The local exec proxy](/part-5/local-execute/) |
+| The network rules of act c | The account id and the Worker name in the two allowed paths | [Network rules](/part-5/egress-policy/) |
+
+The act b3-args task also names a second, made-up account id (`fedcba9876543210fedcba9876543210`) on purpose; leave it as it is.
+
+<Aside type="note" title="Not checked">
+
+- Any macOS version other than 26.7.1, any Intel Mac, any Claude Code version other than 2.1.330, any Node other than 22.23.4.
+- Paths other than the ones above (`~/box-build`, `~/.local/bin/claude`, `~/box-exec-proxy`). The site's own runs used other folders on the same machine.
+- Running the acts on an account other than the worked example's.
+- A separate check of the agent token before act c.
+
+</Aside>
+
+## What to remember
+
+- An Apple silicon Mac, Claude Code, Node 22, a copy of the exec proxy repository, and one local box build.
+- An Anthropic API key, and two broad Cloudflare tokens that differ only in User Details Read.
+- The broad tokens make every refusal Box's, not Cloudflare's.
+- The account id and Worker name appear in four places you change for your own account.
+
+## Read more
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/getting-started.md" source="Box docs">Get started with the box CLI and Claude Code</ReadMore>
+<ReadMore href="https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/" source="Cloudflare docs">Cloudflare's own MCP servers</ReadMore>
+<ReadMore href="/results/builds-and-gaps/" source="This workshop">Builds and gaps</ReadMore>

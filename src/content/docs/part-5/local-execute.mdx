@@ -1,0 +1,594 @@
+---
+title: "The local exec proxy"
+description: "The same search and execute shape as code mode, with execute running inside the box."
+sidebar:
+  label: "The local exec proxy"
+  order: 1
+  badge:
+    text: "Hands-on"
+    class: "aib-badge aib-badge-handson"
+---
+
+import { PartProgress, Pieces, CatchUp, Iteration, Command, Flag, Why, ReadMore, Expect, Seat } from '~/components';
+
+<PartProgress current="part-5/local-execute" />
+
+After this page you will understand the one new piece this workshop proposes: an MCP server with the same two tools as code mode, `search` and `execute`, whose `execute` runs the agent's script inside the box. Part 4 showed that one tool per operation lets the security engineer decide each operation, but each run cost about 240,000 input tokens and waited more than a minute for the tool list. The story now needs both things at once: code mode's small tool list for the developer, and a decision on every API request for the security engineer.
+
+<CatchUp>
+
+These are the files as they stand at the end of act b3-args. The profile and the `.dw` files live in `$HOME/box-ws/profiles/ws/`, the JSON files in `$HOME/leaderboard-ops/`.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml"
+packs = ["@box/base"]
+policies = ["operate-tools.dw", "args.dw"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+DISABLE_AUTOUPDATER = "1"
+MCP_TIMEOUT = "300000"
+
+[egress.anthropic]
+destinations = ["api.anthropic.com"]
+secret.ref = "env://ANTHROPIC_API_KEY"
+secret.header = "x-api-key"
+secret.phantom_prefix = "sk-ant-"
+
+[mcp.cloudflare]
+type = "http"
+destinations = ["mcp.cloudflare.com"]
+secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
+```
+
+```text title="$HOME/box-ws/profiles/ws/operate-tools.dw"
+// The security engineer's constraint, written for the one-tool-per-operation server: the agent
+// may run only the tools that read the Workers and their deployments. Every other tool of the
+// 3,053 is refused, among them o11y_telemetry_query (the Worker's logs, which hold attendee
+// names and emails), d1_query (the attendee registry) and every deploy or delete tool.
+@id("operate_tools_only")
+@description("Only the tools that read the Workers and their deployments may run. The Worker's logs and the attendee data hold names and emails, and the agent may not deploy or delete.")
+forbid (principal, action == Box::Action::"mcp:call", resource)
+when { context.input.server == "cloudflare" && context.input.method == "tools/call" }
+unless {
+  context.input has tool && [
+    "workers_legacy_scripts_list",
+    "workers_legacy_scripts_get",
+    "workers_legacy_scripts_scriptAndVersionSettings_get",
+    "workers_legacy_scripts_content_get",
+    "workers_legacy_scripts_versions_list",
+    "workers_deployments_list"
+  ].contains(context.input.tool)
+};
+```
+
+```text title="$HOME/box-ws/profiles/ws/args.dw"
+// The security engineer's constraint 5, "This account only", for the one-tool-per-operation server:
+// workers_deployments_list may run, but only on the workshop's own Cloudflare account.
+// Box types the tool's arguments from tools/list; the account is the path argument account_id.
+@id("this_account_only")
+@description("The agent operates the workshop progress tracker on its own account, 0123456789abcdef0123456789abcdef, and nowhere else.")
+forbid (principal, action == cloudflare::Action::"workers_deployments_list", resource)
+unless { context.input.path has account_id && context.input.path.account_id == "0123456789abcdef0123456789abcdef" };
+```
+
+```text title="$HOME/box-ws/profiles/ws/no-remote-execute.dw"
+// The security engineer's first constraint on the workshop app: the agent may not read
+// the Worker's logs or the attendee data. Cloudflare's execute tool could do both, out of
+// Box's sight, so it is refused by name.
+@id("no_hidden_api_calls")
+@description("Cloudflare's execute tool runs its script on Cloudflare's side, where Box cannot see which API calls it makes. Use a tool whose calls Box can decide.")
+forbid (principal, action == cloudflare::Action::"execute", resource);
+```
+
+```json title="$HOME/leaderboard-ops/cloudflare-code-mode.json"
+{
+  "mcpServers": {
+    "cloudflare": {
+      "type": "http",
+      "url": "https://mcp.cloudflare.com/mcp",
+      "headers": { "Authorization": "Bearer ${CLOUDFLARE_MCP_TOKEN}" }
+    }
+  }
+}
+```
+
+```json title="$HOME/leaderboard-ops/cloudflare-per-endpoint.json"
+{
+  "mcpServers": {
+    "cloudflare": {
+      "type": "http",
+      "url": "https://mcp.cloudflare.com/mcp?codemode=false",
+      "headers": { "Authorization": "Bearer ${CLOUDFLARE_MCP_TOKEN}" }
+    }
+  }
+}
+```
+
+</CatchUp>
+
+<Pieces stage={5} />
+
+New in the picture: the local exec proxy, an MCP server that runs inside the box in a sandbox of its own, and a direct line from the egress gateway to the Cloudflare API. The vendor's MCP server is drawn dashed: it is not on the path of act c.
+
+## Where Part 4 left the two seats
+
+Each act so far traded one thing for another.
+
+- In act b1 the vendor's `execute` ran the agent's script on Cloudflare's side. Box saw one `mcp:call` for `execute` and no request to `api.cloudflare.com` at all. The logs came back.
+- In act b2 the security engineer refused `execute` by name. Both tasks were refused, the harmless one too.
+- In acts b3 and b3-args the vendor's server offered one tool per API operation, 3,053 of them. The policy could decide each operation and even its arguments. The developer paid for it: about 240,000 input tokens and 75 to 85 seconds per run, measured on the newer builds (see [Measurements](/results/measurements/)).
+
+The question for Part 5: can the developer keep the small tool list of code mode while the security engineer still decides every API request?
+
+## The idea: keep code mode, move execute
+
+Code mode gives the agent two tools. `search` finds an operation in the API's description. `execute` runs a short script the agent writes, and that script makes the API requests. One call can do several requests, and the tool list stays small. Some servers call the same idea `execute_script`; the tool in this workshop is named `execute`.
+
+What matters for the security engineer is where the script runs.
+
+| | Vendor's `execute` (acts b1, b2) | Local `execute` (act c) |
+|---|---|---|
+| Where the script runs | on Cloudflare's side, behind `mcp.cloudflare.com` | inside the box, in the exec proxy's own sandbox |
+| What leaves the box | one MCP request that holds the whole script | one HTTPS request per API call the script makes |
+| What Box can decide | the tool call: server, method, tool name | the tool call, and then every API request: method, host, path |
+| Which token is used | the MCP token, held on the vendor's side | the API token, added by Box's gateway |
+
+So the local proxy does not make the agent see less or do less. It moves the API requests to a place where Box already decides every request: the egress gateway.
+
+## The design of the local exec proxy
+
+The proxy is a proof of concept in the [box-exec-proxy](https://github.com/so0k/box-exec-proxy) repository, under `proxy/`. It is a small Node 22 program with no dependencies, an MCP server that speaks JSON-RPC over standard input and output (a "stdio" server). Its own README says it plainly: it is "a convenience tool, not a security component". Box is the sandbox and the place where requests are decided. The proxy holds no policy and no real secret.
+
+### Two tools, copied from the vendor
+
+The two tools have the same names, argument shapes and annotations as the tools of Cloudflare's own code mode (source: `proxy/lib/tools.js`).
+
+- `search` takes `code`, a JavaScript async arrow function, and an optional `truncate`. It runs the function with `spec` in scope: Cloudflare's OpenAPI description, read from `spec/spec.json` beside the proxy. It makes no network call.
+- `execute` takes `code`, an optional `account_id` and an optional `truncate`. It runs the function with three things in scope: `cloudflare.request({ method, path, query, body, contentType })`, the constant `accountId`, and `fetch`. It returns what the function returns, plus a report of every outbound call: its method, its path and what happened to it (sent with a status, refused with a rule, failed, not sent).
+
+`accountId` is the `account_id` argument if the agent gives one, otherwise the server's `CLOUDFLARE_ACCOUNT_ID` variable. The profile sets that variable in the last iteration below.
+
+### How execute runs a script
+
+From `proxy/lib/execute.js` and `proxy/lib/sandbox-worker.js`:
+
+1. The proxy starts a Node worker thread with an empty environment, so the token never reaches the script's thread. The worker has a 512 MB memory cap and a 60 second time limit, and at most 8 scripts run at once.
+2. The worker runs the agent's code in a fresh `node:vm` context that exposes only `cloudflare.request`, `accountId`, `fetch` and basic globals. Node's own documentation says `node:vm` is not a security mechanism, and the proxy does not rely on it. Box is the boundary.
+3. Each `cloudflare.request` or `fetch` becomes a message to the proxy's main thread. The main thread sends a real HTTPS request to `https://api.cloudflare.com/client/v4` plus the path, with an `Authorization: Bearer` header built from its `CLOUDFLARE_API_TOKEN` variable.
+4. Limits, for hygiene and not for security: 50 calls per script, 30 seconds per call, 10 MB per response, 24,000 characters of result unless `truncate` is turned off.
+
+### Why every request must pass Box's gateway
+
+The proxy cannot send a request around Box, for three reasons that come from Box, not from the proxy.
+
+- Box starts the proxy in its own sandbox. The proxy reaches only the files the profile grants it (iteration 4 below).
+- The proxy's network is contained. The `network.contain_egress` setting of an `[mcp.<name>]` table defaults to `true`: the box sets `HTTPS_PROXY` for the server, so every connection goes to the egress gateway, where policy decides each `net:connect` and each `http:request` (Box docs, `mcp.md`, "Network"). Node's `fetch` follows that variable. The profile on this page leaves the setting at its default.
+- The proxy never holds the real token. Its `CLOUDFLARE_API_TOKEN` holds a stand-in, and the gateway swaps the stand-in for the real token only on a request that policy permits, for the hosts of the route (next page).
+
+When the gateway refuses a request, it answers `403` and the request never reaches Cloudflare. The proxy reads that answer and throws an error inside the script that starts with `Refused by Box egress policy (rule: <id>)`. The agent sees it in the tool result. The proxy reports the refusal; it never decides one.
+
+## How Box starts it: two declarations that must agree
+
+In Part 2 the Cloudflare server was remote. Claude Code learned its URL from the `--mcp-config` file, and the profile's `[mcp.cloudflare]` table named its host in `destinations`. Box matched the requests to that host and decided them as `mcp:call`.
+
+A local server is a program, not a URL, so the two declarations name a program.
+
+| | Claude Code's file, `exec-proxy.json` | The profile's `[mcp.exec-proxy]` table |
+|---|---|---|
+| Read by | Claude Code | Box |
+| Says | run `node` with one argument, the proxy's path | the server's type (`stdio`), the exact program and arguments, its files, its environment |
+| Path spelling | `${HOME}/...`, filled in by Claude Code | `${{ home }}/...`, filled in by Box |
+
+Box puts a stand-in program, an alias, on the agent's `PATH`, named after the file name of the profile's program: here `node`. When Claude Code runs `node` with the same arguments in the same order, Box asks policy (`shell:spawn`, with the generated rule `mcp_exec-proxy_spawn`), starts the declared program in its own sandbox, and passes the MCP messages through its MCP broker. The broker decides each `mcp:call` (generated rule `mcp_exec-proxy_call`) and reads the server's `tools/list` to type each tool.
+
+If the two declarations differ, the alias runs the next ordinary program of that name on the agent's `PATH`, with no MCP checks at all (Box docs, `mcp.md`). In this workshop's box there is no other `node` on the agent's `PATH`, so the start simply fails. Measured in an earlier test with a scratch server: `strands-box: no ordinary executable for "node" on the agent's PATH`, exit status 127.
+
+## Build it, one change at a time
+
+Every iteration below uses one free check. It runs Claude Code in the box with an invalid model key: Claude Code starts its MCP servers, makes its first model call, gets refused by the Anthropic API, and stops. Nothing is billed.
+
+<Command what="Starts Claude Code in the box with only the exec proxy as its MCP server, and stops at the first model call.">
+
+```sh
+ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key box run ws --no-banner -- --bare --strict-mcp-config \
+  --mcp-config exec-proxy.json --tools "" --allowedTools mcp__exec-proxy --model claude-sonnet-5-5 \
+  --max-turns 1 -p "Say hello." --output-format stream-json --verbose < /dev/null > check.jsonl
+```
+
+<Flag name="ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key">Sets the variable for this one command only. The key is not valid, so the first model call is refused and nothing is billed. Leave the prefix out and the same command is a real, paid run.</Flag>
+<Flag name="box run ws">Runs the profile `ws` with the current folder, `$HOME/leaderboard-ops`, as the project.</Flag>
+<Flag name="--no-banner">Box draws no activity line under the agent. Headless runs do not need it.</Flag>
+<Flag name="--">Ends Box's options. Everything after it goes to Claude Code.</Flag>
+<Flag name="--bare">Claude Code's minimal mode: no hooks, plugins, memory or settings files of yours. It keeps your own Claude Code set-up out of the act.</Flag>
+<Flag name="--strict-mcp-config">Claude Code loads only the servers in `--mcp-config`, none of yours.</Flag>
+<Flag name="--mcp-config exec-proxy.json">The one MCP server of this part, from the file you write in iteration 2.</Flag>
+<Flag name='--tools ""'>No built-in tools (no Bash, Read or Edit). The agent's only tools are the proxy's, and Claude Code never uses the box's shell, so no shell rule is needed.</Flag>
+<Flag name="--allowedTools mcp__exec-proxy">Pre-approves every tool of the `exec-proxy` server. A headless run cannot answer a permission question.</Flag>
+<Flag name="--model claude-sonnet-5-5">Pins the model, so every act's numbers compare.</Flag>
+<Flag name="--max-turns 1">Stops after one model turn. A free check needs no more.</Flag>
+<Flag name='-p "Say hello."'>Headless mode with a task. Any task works here, because the model call fails.</Flag>
+<Flag name="--output-format stream-json --verbose">One JSON event per line. The first line, the `init` event, lists each MCP server with its status and the tools Claude Code received.</Flag>
+<Flag name="< /dev/null">Gives Claude Code an empty input, so it does not wait three seconds for one.</Flag>
+<Flag name="> check.jsonl">Writes the stream to a file. Box's own messages stay on the terminal.</Flag>
+
+</Command>
+
+Two commands read the result. `head -1 check.jsonl` prints the `init` event: look for `"mcp_servers"`. `box runs history <id>` prints Box's decisions for the run; the ID is in the line `box: policy history: box runs history b-...` that `box run` prints before the agent starts. The decision rows below are shown without their time column.
+
+<Iteration n={1} title="The vendor leaves the path">
+
+**What we change.** Three lines go out of the profile: the `policies` line, the `MCP_TIMEOUT` line and the whole `[mcp.cloudflare]` table. The three `.dw` files can stay on disk; no profile lists them now.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" del={2,18,25-29}
+packs = ["@box/base"]
+policies = ["operate-tools.dw", "args.dw"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+DISABLE_AUTOUPDATER = "1"
+MCP_TIMEOUT = "300000"
+
+[egress.anthropic]
+destinations = ["api.anthropic.com"]
+secret.ref = "env://ANTHROPIC_API_KEY"
+secret.header = "x-api-key"
+secret.phantom_prefix = "sk-ant-"
+
+[mcp.cloudflare]
+type = "http"
+destinations = ["mcp.cloudflare.com"]
+secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
+```
+
+**The run.** The free check of Part 2, with the code-mode file, shows what removing the declaration did.
+
+<Command what="Starts Claude Code in the box with the vendor's code-mode server, and stops at the first model call.">
+
+```sh
+ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key box run ws --no-banner -- --bare --strict-mcp-config \
+  --mcp-config cloudflare-code-mode.json --tools "" --allowedTools mcp__cloudflare \
+  --model claude-sonnet-5-5 --max-turns 1 -p "Say hello." --output-format stream-json --verbose \
+  < /dev/null > check.jsonl
+```
+
+<Flag name="--mcp-config cloudflare-code-mode.json">The vendor's server in code mode, the file from the set-up page.</Flag>
+<Flag name="--allowedTools mcp__cloudflare">Pre-approves the vendor server's tools. Every other flag is as in the free check above.</Flag>
+
+</Command>
+
+**What we see.** Claude Code still knows the server, but Box no longer does, so its host is closed again.
+
+<Expect variant="refuse">
+
+```text
+"mcp_servers":[{"name":"cloudflare","status":"failed"}]
+deny  net:connect  mcp.cloudflare.com:443  <default-deny>  no permit matched
+```
+
+</Expect>
+
+<Why>
+
+A rule for a server the profile no longer declares cannot load, and the `MCP_TIMEOUT` of 300 seconds would turn the next failure into a five-minute wait. That happened while this page was written: with the timeout still set, iteration 3 hung for 300 seconds with the server `pending`.
+
+<Fragment slot="alternative">
+
+Keep `[mcp.cloudflare]` and its rules beside the proxy. Then the box still lets the agent reach `mcp.cloudflare.com`, and the vendor's `execute`, with its calls out of Box's sight, is one tool call away again. Act c is about one path, so the vendor leaves it.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+<Iteration n={2} title="Tell Claude Code about the proxy">
+
+**What we add.** A new file in the workspace. The profile does not change in this iteration.
+
+```json title="$HOME/leaderboard-ops/exec-proxy.json"
+{
+  "mcpServers": {
+    "exec-proxy": {
+      "command": "node",
+      "args": ["${HOME}/box-exec-proxy/proxy/exec-proxy"]
+    }
+  }
+}
+```
+
+- `"exec-proxy"` is the server's name. Claude Code names its tools after it: `mcp__exec-proxy__search` and `mcp__exec-proxy__execute`.
+- `"command": "node"` is a bare program name. Claude Code looks it up on its own `PATH`.
+- `"args"` holds one argument, the proxy's entry file. Claude Code fills in `${HOME}` from its environment.
+
+**The run.** The free check of this part, the first command on this page.
+
+**What we see.** The server fails, and Box records nothing for it.
+
+<Expect variant="refuse">
+
+```text
+"mcp_servers":[{"name":"exec-proxy","status":"failed"}]
+```
+
+There is no row for `exec-proxy` in `box runs history`.
+
+</Expect>
+
+<Why>
+
+This iteration shows that Claude Code's file alone does nothing inside the box. The agent's `PATH` in the box is `/usr/bin:/bin` (set by the `@box/base` pack), and it holds no `node`. Nothing started, so Box had nothing to decide.
+
+<Fragment slot="alternative">
+
+Add Node's folder to the agent's `PATH` in `[agent.env]`. Then the agent would run Node itself, outside any MCP checks, as an ordinary program. Box's way is the declaration in the next iteration.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+<Iteration n={3} title="Declare it in the profile">
+
+**What we add.** An `[mcp.exec-proxy]` table with the server's type and its exact command. First find your Node folder.
+
+<Command what="Prints the folder where mise installed Node 22.">
+
+```sh
+mise where node@22
+```
+
+<Flag name="where">Prints the install folder of a tool version that mise has installed.</Flag>
+<Flag name="node@22">Node, major version 22: the version the proxy was written and tested with. The folder on the workshop's machine ends in `node/22.23.4`; use the folder your command prints.</Flag>
+
+</Command>
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={24-26}
+packs = ["@box/base"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+DISABLE_AUTOUPDATER = "1"
+
+[egress.anthropic]
+destinations = ["api.anthropic.com"]
+secret.ref = "env://ANTHROPIC_API_KEY"
+secret.header = "x-api-key"
+secret.phantom_prefix = "sk-ant-"
+
+[mcp.exec-proxy]
+type = "stdio"
+command = ["${{ home }}/.local/share/mise/installs/node/22.23.4/bin/node", "${{ home }}/box-exec-proxy/proxy/exec-proxy"]
+```
+
+- `[mcp.exec-proxy]`: the same name as in Claude Code's file. With a `type`, this table declares the server yourself.
+- `type = "stdio"`: a local program that speaks MCP on its standard input and output.
+- `command`: element 0 is the absolute path of Node, the rest are its arguments. Box places an alias named `node`, the file name of element 0, on the agent's `PATH`. Claude Code's `"node"` plus its one argument now match this command, so running the alias starts the declared server. `${{ home }}` is a Box placeholder for your home folder.
+
+**The run.** The free check of this part.
+
+**What we see.** Policy permits the start, and the server still does not answer.
+
+<Expect>
+
+```text
+"mcp_servers":[{"name":"exec-proxy","status":"pending"}]
+permit  shell:spawn  ~/.local/share/mise/installs/node/22.23.4/bin/node  mcp_exec-proxy_spawn
+permit  shell:spawn  ~/.local/share/mise/installs/node/22.23.4/bin/node  mcp_exec-proxy_spawn
+```
+
+On the terminal, Box also prints these two lines:
+
+```text
+strands-box broker: rejected client: MCP server closed stdout before it sent a complete response
+[mcp.exec-proxy] broad exec: may run any reachable binary, and load code it writes into its writable grants above
+```
+
+</Expect>
+
+The status is `pending` after Claude Code's default 30 second wait for a server. The first line on the terminal says the server ended before it answered. The reason is that its sandbox gives it nothing to read: not Node's own libraries, not the proxy's code. Box does not show Node's own error message; that is one of the [gaps](/results/builds-and-gaps/). The second line is Box's start-up report warning that a Node server can run any program it can reach and load code from where it can write. In this profile it can write nowhere.
+
+<Why>
+
+An absolute path for Node selects exactly that program, whatever else is on a `PATH`. Box generates `mcp_exec-proxy_spawn`, which pins that exact program path, so the security engineer knows which program starts.
+
+<Fragment slot="alternative">
+
+A bare `node` as element 0 would be looked up on the `PATH` of the shell that runs `box run`: whichever `node` comes first there would start. A launcher file with a `#!` line, which the old demo used, is not needed: the command above was checked without one.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+<Iteration n={4} title="Give the server its files">
+
+**What we add.** One list, `filesystem.read`, with three folders the server may read.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={27-31}
+packs = ["@box/base"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+DISABLE_AUTOUPDATER = "1"
+
+[egress.anthropic]
+destinations = ["api.anthropic.com"]
+secret.ref = "env://ANTHROPIC_API_KEY"
+secret.header = "x-api-key"
+secret.phantom_prefix = "sk-ant-"
+
+[mcp.exec-proxy]
+type = "stdio"
+command = ["${{ home }}/.local/share/mise/installs/node/22.23.4/bin/node", "${{ home }}/box-exec-proxy/proxy/exec-proxy"]
+filesystem.read = [
+  "${{ home }}/.local/share/mise/installs/node/22.23.4",
+  "${{ home }}/box-exec-proxy/proxy",
+  "${{ home }}/box-exec-proxy/spec",
+]
+```
+
+- The Node folder: Node and its libraries. Box's docs say a server that runs on an interpreter such as Node needs `read` for the interpreter's install folder on macOS.
+- `proxy`: the server's code.
+- `spec`: Cloudflare's OpenAPI description, which `search` reads. The proxy looks for `spec/spec.json` next to its own `proxy/` folder by default, so no setting is needed to point at it.
+
+**The run.** The free check of this part.
+
+**What we see.** The server connects and offers its two tools.
+
+<Expect variant="permit">
+
+```text
+"mcp_servers":[{"name":"exec-proxy","status":"connected"}]
+permit  shell:spawn  ~/.local/share/mise/installs/node/22.23.4/bin/node  mcp_exec-proxy_spawn
+permit  mcp:call     exec-proxy/tools/list                               mcp_exec-proxy_call
+```
+
+The `init` event lists the two tools `mcp__exec-proxy__execute` and `mcp__exec-proxy__search`. The whole free check took 3 seconds. With the per-endpoint catalog of Part 4 it took 73 seconds.
+
+</Expect>
+
+<Why>
+
+Only read access, and only to the three folders the server needs. The server can write nowhere, so the "broad exec" warning of iteration 3 has nothing to load code from.
+
+<Fragment slot="alternative">
+
+`filesystem.write` would let the server keep files, for example a cache, and then it could also run what it wrote there. A `deny` list can close a path inside a granted folder. Neither is needed here.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+<Iteration n={5} title="Name the workshop's account">
+
+**What we add.** One line: the server's environment holds the Cloudflare account of the workshop app.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={32}
+packs = ["@box/base"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+DISABLE_AUTOUPDATER = "1"
+
+[egress.anthropic]
+destinations = ["api.anthropic.com"]
+secret.ref = "env://ANTHROPIC_API_KEY"
+secret.header = "x-api-key"
+secret.phantom_prefix = "sk-ant-"
+
+[mcp.exec-proxy]
+type = "stdio"
+command = ["${{ home }}/.local/share/mise/installs/node/22.23.4/bin/node", "${{ home }}/box-exec-proxy/proxy/exec-proxy"]
+filesystem.read = [
+  "${{ home }}/.local/share/mise/installs/node/22.23.4",
+  "${{ home }}/box-exec-proxy/proxy",
+  "${{ home }}/box-exec-proxy/spec",
+]
+env = { CLOUDFLARE_ACCOUNT_ID = "0123456789abcdef0123456789abcdef" }
+```
+
+`env` sets variables for the server, not for the agent. The proxy gives the value to every script as the constant `accountId`.
+
+**The run.** No run of its own. The free check looks the same as in iteration 4, because no script runs before the model answers. The line shows its effect in the first real run, on the next page, where the script's request names this account.
+
+<Why>
+
+A script that reads `accountId` gets the workshop's account without the agent having to find it. The security engineer still pins the account in the policy (next page); this line is a convenience, not a control.
+
+<Fragment slot="alternative">
+
+Leave it out, and the agent must pass `account_id` in each `execute` call. A script that reads `accountId` with neither set throws an error.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+## The two seats
+
+<Seat who="security">
+
+Box now runs the code the model wrote, but inside the box, in a sandbox of its own that reads three folders and writes nowhere. For the tool call itself the policy still sees only `mcp:call exec-proxy/execute`: it does not read the script. What changes is everything after that: each API request the script makes leaves through the egress gateway and is a decision of its own. So far there is no route to `api.cloudflare.com`, so every such request would be refused. The proxy is not a security component; nothing on this page asks you to trust it.
+
+</Seat>
+<Seat who="developer">
+
+The agent has the same two-tool shape as code mode: find the operation with `search`, do the work with `execute`. The proxy's tool list is 6,071 bytes, about 1,500 tokens by a bytes-divided-by-four estimate (not counted with the token counter). In the box 0.1.8 runs, the first model request of act c was 2,263 input tokens in all, system prompt included. The server is ready in seconds, not after a minute of staging.
+
+</Seat>
+
+## What to remember
+
+- The local exec proxy keeps code mode's two tools, `search` and `execute`, and runs the script inside the box.
+- Box starts a stdio server when the agent runs the alias with exactly the profile's command and arguments.
+- The server's own sandbox needs file grants: Node, the proxy's code, the API description.
+- The server's network is contained by default, so every request a script makes goes to the egress gateway.
+- The proxy holds no policy and no real secret. Box decides; the proxy reports.
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp.md" source="Box docs">MCP server configuration: stdio servers, aliases, filesystem and network</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference: placeholders and `[mcp.<name>]` in a profile</ReadMore>
+<ReadMore href="https://blog.cloudflare.com/code-mode/" source="Cloudflare blog">Code Mode, the idea the proxy copies</ReadMore>
+<ReadMore href="https://github.com/cloudflare/mcp" source="Cloudflare on GitHub">Cloudflare's MCP server, whose tool shapes the proxy copies</ReadMore>
+<ReadMore href="https://www.anthropic.com/engineering/code-execution-with-mcp" source="Anthropic engineering">Code execution with MCP</ReadMore>
+<ReadMore href="https://nodejs.org/api/vm.html" source="Node.js docs">The `node:vm` module, and why it is not a security mechanism</ReadMore>
+<ReadMore href="https://code.claude.com/docs/en/mcp" source="Claude Code docs">Connecting Claude Code to MCP servers</ReadMore>

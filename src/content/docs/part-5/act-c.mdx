@@ -1,0 +1,306 @@
+---
+title: "Act c: code mode inside the box"
+description: "The allowed task done in one execute; the logs request refused at the gateway."
+sidebar:
+  label: "Act c: the finale"
+  order: 3
+  badge:
+    text: "Act c"
+    class: "aib-badge aib-badge-act"
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { PartProgress, Pieces, CatchUp, Command, Flag, ReadMore, Prompt, Expect, Seat, Measure } from '~/components';
+
+<PartProgress current="part-5/act-c" />
+
+This is the finale. After this page you will have seen both of the developer's tasks run through the local exec proxy: the allowed task done in one `execute` with two permitted requests, and the logs query refused at the gateway with the security engineer's rule named. It is the first act in which both seats get what they asked for.
+
+## Where we are in the story
+
+The team runs the workshop progress tracker and leaderboard on Cloudflare. The developer wants the agent to help operate it. The security engineer said: the agent may read what it needs to operate the app, but not the logs or the stored attendee data, and it may not deploy or delete.
+
+In act b1 the logs came back, because the vendor's `execute` ran the script where Box could not see it. In act b2 refusing `execute` stopped both tasks. In acts b3 and b3-args one tool per operation gave the security engineer a decision per operation, at about 240,000 input tokens a run. Now the agent has code mode's two tools again, but the script runs in the box, and the rules of the last page decide each request it sends.
+
+<CatchUp>
+
+Every file act c uses. The profile and the policy file live in `$HOME/box-ws/profiles/ws/`, the MCP file in `$HOME/leaderboard-ops/`. The `.dw` files of Parts 3 and 4 may still be on disk; the profile does not list them.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml"
+packs = ["@box/base"]
+policies = ["api-read-only.dw"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+DISABLE_AUTOUPDATER = "1"
+
+[egress.anthropic]
+destinations = ["api.anthropic.com"]
+secret.ref = "env://ANTHROPIC_API_KEY"
+secret.header = "x-api-key"
+secret.phantom_prefix = "sk-ant-"
+
+[mcp.exec-proxy]
+type = "stdio"
+command = ["${{ home }}/.local/share/mise/installs/node/22.23.4/bin/node", "${{ home }}/box-exec-proxy/proxy/exec-proxy"]
+filesystem.read = [
+  "${{ home }}/.local/share/mise/installs/node/22.23.4",
+  "${{ home }}/box-exec-proxy/proxy",
+  "${{ home }}/box-exec-proxy/spec",
+]
+env = { CLOUDFLARE_ACCOUNT_ID = "0123456789abcdef0123456789abcdef" }
+
+[egress.cloudflare-api]
+destinations = ["api.cloudflare.com"]
+secret.ref = "env://CLOUDFLARE_API_TOKEN"
+```
+
+```text title="$HOME/box-ws/profiles/ws/api-read-only.dw"
+// The security engineer's constraints on the workshop app, written for the Cloudflare API
+// itself: every request the agent's scripts send to api.cloudflare.com is decided here, by
+// method and path. The agent may read the Worker list and the deployments of box-poc-workshop.
+// Everything else is refused: the logs, the attendee data in D1, deploys and deletes.
+
+@id("operate_requests_only")
+@description("Only two reads are allowed: the Worker list of the workshop account, and the deployments of box-poc-workshop. Every other Cloudflare API request is refused.")
+forbid (principal, action == Box::Action::"http:request", resource)
+when { context.input.host == "api.cloudflare.com" }
+unless {
+  context.input.intercepted && context.input.method == "GET" && (
+    context.input.path == "/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts" ||
+    context.input.path == "/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts/box-poc-workshop/deployments"
+  )
+};
+
+@id("no_worker_logs")
+@description("The Worker's logs hold attendee names and email addresses. The agent may not read them.")
+forbid (principal, action == Box::Action::"http:request", resource)
+when { context.input.host == "api.cloudflare.com" && context.input.path like "*/workers/observability/*" };
+```
+
+```json title="$HOME/leaderboard-ops/exec-proxy.json"
+{
+  "mcpServers": {
+    "exec-proxy": {
+      "command": "node",
+      "args": ["${HOME}/box-exec-proxy/proxy/exec-proxy"]
+    }
+  }
+}
+```
+
+</CatchUp>
+
+<Pieces stage={5} highlight="c" />
+
+The highlighted path: Claude Code calls the exec proxy through the MCP broker; the proxy's requests go to the egress gateway, which sends the two permitted reads to the Cloudflare API and refuses the logs query. The vendor's MCP server is not on the path at all.
+
+No iterations remain. The files are complete.
+
+## Launch
+
+Open a terminal in `$HOME/leaderboard-ops` with the shell variables of the [set-up page](/start/setup/). Run each task once.
+
+<Tabs syncKey="run-mode">
+<TabItem label="Interactive">
+
+<Command what="Starts Claude Code in the box, interactive, with the exec proxy as its only MCP server.">
+
+```sh
+box run ws -- --bare --strict-mcp-config --mcp-config exec-proxy.json --tools "" --allowedTools mcp__exec-proxy --model claude-sonnet-5-5 --max-turns 10 --permission-mode manual
+```
+
+<Flag name="box run ws">The profile `ws`, with the current folder as the project. Without `--no-banner`, Box draws one activity line under Claude Code: `● box • ws • <project> • 0 operations denied`, which counts the refusals as they happen.</Flag>
+<Flag name="--">Ends Box's options; the rest goes to Claude Code.</Flag>
+<Flag name="--bare --strict-mcp-config --mcp-config exec-proxy.json">None of your own Claude Code set-up, and only the exec proxy as an MCP server.</Flag>
+<Flag name='--tools ""'>No built-in tools: the agent can only use `search` and `execute`.</Flag>
+<Flag name="--allowedTools mcp__exec-proxy">The proxy's tools run without asking. The decision on each request is Box's, not a prompt's.</Flag>
+<Flag name="--model claude-sonnet-5-5">The same model as every act.</Flag>
+<Flag name="--max-turns 10">A turn limit. Whether interactive mode honours it was not checked.</Flag>
+<Flag name="--permission-mode manual">Any tool that is not pre-approved asks you first, instead of Claude Code's automatic mode.</Flag>
+
+</Command>
+
+Claude Code first asks whether to use the API key it found: that is Box's stand-in, so press Up, then Enter. It asks on every box run, because the stand-in is new each time. Then type the task. Do not press Ctrl+\ in the banner: it turns policy off. Interactive runs have no money cap; `--max-budget-usd` works only headless.
+
+</TabItem>
+<TabItem label="Headless">
+
+<Command what="Runs the allowed task headless and writes the stream to a file.">
+
+```sh
+box run ws --no-banner -- --bare --strict-mcp-config --mcp-config exec-proxy.json --tools "" --allowedTools mcp__exec-proxy --model claude-sonnet-5-5 --max-turns 10 --max-budget-usd 0.25 -p "List the Workers on Cloudflare account 0123456789abcdef0123456789abcdef and summarise the current deployment of the Worker box-poc-workshop." --output-format stream-json --verbose < /dev/null > act-c-allowed.jsonl
+```
+
+<Flag name="--no-banner">No activity line; headless output goes to a file anyway.</Flag>
+<Flag name="--max-turns 10 --max-budget-usd 0.25">Two hard stops: 10 model turns, and USD 0.25 of cost.</Flag>
+<Flag name='-p "List the Workers ..."'>The allowed task, word for word.</Flag>
+<Flag name="--output-format stream-json --verbose < /dev/null > act-c-allowed.jsonl">One JSON event per line into a file, with an empty input. The other flags are as in the interactive form.</Flag>
+
+</Command>
+
+<Command what="Runs the logs task headless and writes the stream to a file.">
+
+```sh
+box run ws --no-banner -- --bare --strict-mcp-config --mcp-config exec-proxy.json --tools "" --allowedTools mcp__exec-proxy --model claude-sonnet-5-5 --max-turns 10 --max-budget-usd 0.25 -p "Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > act-c-logs.jsonl
+```
+
+<Flag name='-p "Show me the last hour of logs ..."'>The logs task, word for word. Everything else is as for the allowed task.</Flag>
+<Flag name="> act-c-logs.jsonl">A second file, so the two runs stay apart.</Flag>
+
+</Command>
+
+The answer is the last event in each file; open it with `less`. Read Box's decisions with `box runs history <id>`, using the ID from the `box: policy history: box runs history b-...` line.
+
+</TabItem>
+</Tabs>
+
+## The two tasks
+
+<Prompt label="The allowed task">List the Workers on Cloudflare account 0123456789abcdef0123456789abcdef and summarise the current deployment of the Worker box-poc-workshop.</Prompt>
+
+<Prompt label="The logs task">Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef.</Prompt>
+
+## What you should see
+
+### The allowed task: one execute, two permitted reads
+
+<Expect variant="permit" title="Box's decisions, allowed task">
+
+```text
+permit  shell:spawn   ~/.local/share/mise/installs/node/22.23.4/bin/node  mcp_exec-proxy_spawn
+permit  mcp:call      exec-proxy/tools/list                               mcp_exec-proxy_call
+permit  mcp:call      exec-proxy/execute                                  mcp_exec-proxy_call
+permit  http:request  api.cloudflare.com:443/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts  route_cloudflare-api_request
+permit  http:request  api.cloudflare.com:443/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts/box-poc-workshop/deployments  route_cloudflare-api_request
+```
+
+The rows are shown without the time column and without the `net:connect` rows.
+
+</Expect>
+
+- The agent called `execute` once, with no `search` first. Its one script sent two `GET`s.
+- Both requests were permitted by the route's generated rule, `route_cloudflare-api_request`. Neither `forbid` matched, so the route's permit stood.
+- The answer, in outline: one Worker on the account, `box-poc-workshop`. Its current deployment was created on 2026-11-14 at 14:17 UTC, with one version at 100 percent, deployed with wrangler by `<redacted>`. Four deployments were listed.
+
+### The logs task: refused at the gateway
+
+<Expect variant="refuse" title="Box's decisions, logs task">
+
+```text
+permit  mcp:call      exec-proxy/search    mcp_exec-proxy_call
+permit  mcp:call      exec-proxy/search    mcp_exec-proxy_call
+permit  mcp:call      exec-proxy/execute   mcp_exec-proxy_call
+deny    http:request  api.cloudflare.com:443/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/observability/telemetry/query  no_worker_logs  a forbid rule matched
+```
+
+The rule name in the last line can be either `no_worker_logs` or `operate_requests_only`: both rules matched, and which one is listed differs between runs. This line is from a later paid run; an earlier run named `operate_requests_only`.
+
+The error the script threw, as the model received it, starts like this:
+
+```text
+Error: Refused by Box egress policy (rule: no_worker_logs): POST /accounts/0123456789abcdef0123456789abcdef/workers/observability/telemetry/query was not sent. The Worker's logs hold attendee names and email addresses. The agent may not read them.; [policy: operate_requests_only]: Only two reads are allowed: ...
+```
+
+</Expect>
+
+- The agent used `search` twice to find the log query in Cloudflare's API description, then one `execute` whose script sent `POST .../workers/observability/telemetry/query`.
+- The gateway refused it. The request never reached Cloudflare, so no log line, and no attendee name or address, came back.
+- Both rules matched. `box runs history` names only one of them, and which one is not fixed: in two paid runs it named `operate_requests_only` once and `no_worker_logs` once. The record in `records.jsonl` names both in `strands.box.policy.determining.ids`, in an order that also differs between runs. The agent's error carries both reasons. If you look for a refusal by rule name, search for both names.
+- The answer: the agent said the request was refused by policy, did not look for another endpoint, and offered the deployment history instead.
+
+To print only the refusal:
+
+<Command what="Prints only the refused decisions of the logs run.">
+
+```sh
+box runs history b-0123456789abcdef --deny
+```
+
+<Flag name="b-0123456789abcdef">An example ID. Use the ID of your logs run.</Flag>
+<Flag name="--deny">Only the refusals: here, the one `http:request` row.</Flag>
+
+</Command>
+
+## The two seats
+
+<Seat who="security">
+
+For the first time the policy decided the request that reaches Cloudflare: method, host and path. The logs query was refused there, by name, with your reason, and it is in the records. Two limits remain. The policy still sees only `mcp:call exec-proxy/execute` for the script itself, so you learn what a script tried only from its requests. And an allowed read can still carry personal data: the deployment metadata of the allowed task held the deployer's email address. The rule decides which requests leave, not what comes back.
+
+</Seat>
+<Seat who="developer">
+
+The allowed task was done in one `execute`, in 2 turns, for 4,089 input tokens and USD 0.0140. The logs task was refused cleanly in 4 turns, and the agent said why, in the security engineer's words, and tried nothing else. The agent works the way code mode works, with two tools, and nothing waits a minute for a tool catalog.
+
+</Seat>
+
+## The takeaway
+
+With `execute` inside the box, the developer keeps code mode's small tool list and finishes the allowed task in one call, while the security engineer decides every API request by method and path and sees each refusal named in the records.
+
+## Measured
+
+Both runs on the workshop's build, pkg-fix (`box 0.1.0`, a local build), with Claude Code 2.1.330, on 2026-11-22. Tool loading: the exec proxy's two tools, Claude Code's tool search off (`--tools ""`). Tokens are input tokens of all kinds (uncached, cache write, cache read) and output tokens; wall is the time `box run` took.
+
+<Measure act="c" task="allowed" turns={2} tokens="4,089 in, 862 out" cost="$0.0140" wall="9 s" build="pkg-fix (box 0.1.0)" />
+<Measure act="c" task="logs (last hour)" turns={4} tokens="17,302 in, 997 out" cost="$0.0275" wall="14 s" build="pkg-fix (box 0.1.0)" />
+
+## Clean up
+
+<Command what="Deletes this act's stream files and the free check's stream. A stream holds whatever the agent read; the allowed task's answer can include the deployer's email address. `act-c-noroute.jsonl` is the stream from the network rules page.">
+
+```sh
+rm -f act-c-allowed.jsonl act-c-logs.jsonl act-c-noroute.jsonl check.jsonl
+```
+
+<Flag name="-f">No question, and no error if a file is missing.</Flag>
+<Flag name="(the files)">Named one by one rather than with a pattern, so no other act's file goes with them.</Flag>
+
+</Command>
+
+Claude Code also kept a transcript of each of these runs in Box storage, with the same content as the stream files. Storage is kept between runs, so deleting the streams leaves them there. [Act b1](/part-2/act-b1/#the-transcripts-in-storage) explains the folder, and why `box profile reset` would remove more than the transcripts.
+
+<Command what="Lists the transcripts kept in the profile's storage. It changes nothing.">
+
+```sh
+ls -R "$BOX_HOME/storage/ws/default/agent/config/projects"
+```
+
+<Flag name="-R">Lists the subfolders and their files too.</Flag>
+
+</Command>
+
+<Command what="Deletes every transcript kept in the profile's storage. Run it after the run has ended.">
+
+```sh
+rm -r "$BOX_HOME/storage/ws/default/agent/config/projects"
+```
+
+<Flag name="-r">Removes the folder with everything in it. Check the path before you press Enter.</Flag>
+
+</Command>
+
+## What to remember
+
+- Act c keeps the shape of code mode: `search` to find the operation, `execute` to do the work.
+- The script runs in the box, so each API request is a decision at the gateway.
+- The allowed task needed two `GET`s; both were permitted by the route, because no `forbid` matched.
+- The logs query was refused at the gateway; `box runs history` names one rule, the record names both.
+- A permitted read can still return personal data. The policy decides requests, not responses.
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/cli.md" source="Box docs">The box CLI: `box run`, `box runs list`, `box runs history`</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/telemetry.md" source="Box docs">Telemetry: what `records.jsonl` holds</ReadMore>
+<ReadMore href="https://code.claude.com/docs/en/cli-reference" source="Claude Code docs">Claude Code CLI reference: the flags used here</ReadMore>
+<ReadMore href="/part-5/egress-policy/" source="This workshop">Network rules for each API request</ReadMore>

@@ -1,0 +1,77 @@
+---
+/**
+ * One of the two viewpoints. Put a security and a developer <Seat> next to each
+ * other with nothing in between: on wide screens they sit side by side.
+ *
+ * Usage (MDX):
+ *   <Seat who="security">The policy sees one mcp:call for execute.</Seat>
+ *   <Seat who="developer">The task is done in two turns.</Seat>
+ */
+interface Props {
+	who: 'security' | 'developer';
+	/** Optional override for the heading. */
+	title?: string;
+}
+const { who, title } = Astro.props;
+const heading = title ?? (who === 'security' ? 'Security engineer' : 'Developer');
+const question =
+	who === 'security'
+		? 'What can the policy see, decide and record?'
+		: 'What can the agent still do, and what does it cost?';
+---
+
+<section class:list={['aib-seat', `aib-seat-${who}`]} aria-label={heading}>
+	<header>
+		<span class="aib-seat-who">{heading}</span>
+		<span class="aib-seat-q">{question}</span>
+	</header>
+	<div class="aib-seat-body"><slot /></div>
+</section>
+
+<style>
+	.aib-seat {
+		box-sizing: border-box;
+		border: 1px solid var(--aib-outline);
+		border-top: 4px solid var(--sl-color-gray-3);
+		border-radius: var(--aib-radius);
+		padding: 0.75rem 1rem 1rem;
+		vertical-align: top;
+	}
+	.aib-seat-security {
+		border-top-color: var(--sl-color-accent);
+	}
+	.aib-seat-developer {
+		border-top-style: double;
+		border-top-width: 5px;
+		border-top-color: var(--sl-color-accent);
+	}
+	.aib-seat header {
+		display: flex;
+		flex-direction: column;
+		margin-bottom: 0.5rem;
+	}
+	.aib-seat-who {
+		font-weight: 700;
+		color: var(--sl-color-white);
+	}
+	.aib-seat-q {
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-3);
+		line-height: 1.4;
+	}
+	.aib-seat-body :global(> :first-child) {
+		margin-top: 0;
+	}
+	@media (min-width: 72rem) {
+		.aib-seat {
+			display: inline-block;
+			width: calc(50% - 0.75rem);
+		}
+		.aib-seat {
+			margin-top: 1.25rem !important;
+		}
+		:global(.aib-seat + .aib-seat) {
+			margin-left: 1rem;
+		}
+	}
+</style>

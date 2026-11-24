@@ -1,0 +1,149 @@
+---
+title: "Rules on a tool's arguments"
+description: "context.input, has, and forbid ... unless: deciding a tool call by what it is called with."
+sidebar:
+  label: "Rules on arguments"
+  order: 3
+  badge:
+    text: "Concept"
+    class: "aib-badge aib-badge-concept"
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import { PartProgress, Pieces, Command, Flag, Why, ReadMore, Seat, Expect } from '~/components';
+
+<PartProgress current="part-4/policy-on-arguments" />
+
+After this page you can write a rule that reads what a tool is called with, not only which tool it is: how Box gives a tool's arguments types, how to find their names, why an optional argument needs `has`, and why such a rule is written as `forbid ... unless`. The story needs it because the allow-list of act b3 lets `workers_deployments_list` run on any Cloudflare account the token can reach, and the security engineer wants it used on the workshop's account only.
+
+<Pieces stage={4} />
+
+The picture is the one from act b3. This page is about the arrow from the tool catalog to the policy engine: the typed schema that lets a rule read each tool's arguments.
+
+## Two decisions for one tool call
+
+A tool call through an identified MCP server is decided twice (Box's action reference):
+
+1. as an **`mcp:call`**, with the fields `server`, `method` and `tool`. Act b3's `operate_tools_only` decides here. So does the generated `mcp_cloudflare_call`.
+2. if that is permitted, as the tool's own **per-tool action**, `cloudflare::Action::"workers_deployments_list"`. Here `context.input` holds the tool's arguments.
+
+The account a call is for is an argument, so a rule about the account is a rule on the per-tool action.
+
+## How Box types a tool's arguments
+
+Every tool in the server's `tools/list` reply describes its input as a JSON Schema: which arguments it takes, of which type, and which ones are required. When Box stages the catalog it turns that description into types the policy engine knows. The rules, from Box's MCP policy guide:
+
+| In the tool's input description | In the rule |
+|---|---|
+| an object with properties | a record: `context.input.path.account_id` |
+| a property listed in `required` | always present: read it directly |
+| a property not listed in `required` | optional: test it with `has` before you read it |
+| `string` | a string, compared with `==` or `like` |
+| `integer` or `number` | `Long`, compared with `<`, `>`, `==` |
+| an `enum` | its base type (a string, for instance) |
+| a type that may also be `null` | that type |
+| `anyOf`, `oneOf` or a list of types | a record with optional `typeChoice0`, `typeChoice1` ... |
+| a name that is not a plain identifier (`zone-id`) | `context.input["zone-id"]`, tested with `has "zone-id"` |
+
+In per-endpoint mode, Cloudflare's tools put the operation's path parameters in an argument called `path` and its query parameters in `query`. For `workers_deployments_list` (the API operation "List Deployments", `GET /accounts/{account_id}/workers/scripts/{script_name}/deployments`) this is the call the model made in act b3, copied from the run's event stream:
+
+```json title="The arguments of a measured workers_deployments_list call"
+{"path":{"account_id":"0123456789abcdef0123456789abcdef","script_name":"box-poc-workshop"}}
+```
+
+So the rule reads the account as `context.input.path.account_id`. The kit's note on this rule gives the generated type as `{ path: { account_id?: String, script_name: String }, query?: ... }`: `account_id` is optional in this tool's description. That note was not re-checked against the 3,053-tool catalog; the rule tests it with `has` either way.
+
+## Finding a tool's argument names with the box CLI
+
+There is no box command that prints a tool's arguments or the schema Box generates. Box Core has one (`strands-box policy generate-schema`), but the box CLI does not ship it, and this build does not know the word:
+
+<Command what="Asks the box CLI for a policy subcommand, to see whether it has one.">
+
+```sh
+box policy generate-schema
+```
+
+<Flag name="policy generate-schema">The Box Core command that writes the generated schema. Not part of the box CLI.</Flag>
+
+</Command>
+
+<Expect variant="refuse">
+
+```text
+box: error: unrecognized subcommand 'policy'
+```
+
+</Expect>
+
+(Measured on the workshop's build. Box Core's command also could not express this server: it builds the server's address from the host alone and drops `?codemode=false`.) This is recorded on [Builds and gaps](/results/builds-and-gaps/). What the reader can use instead, all of it from files the tools already write:
+
+- **The tool's name**: the first line of `check.jsonl` from any free check lists every tool Claude Code received, as `mcp__cloudflare__<name>`. Open it with `less check.jsonl` and search with `/workers_deployments`.
+- **The arguments**: the Cloudflare API reference for the operation names its path and query parameters. In per-endpoint mode they sit under `path` and `query`.
+- **The arguments a model really sends**: a headless run's event stream (`act-b3-steer.jsonl`) holds each tool call with its input, as above. Search it with `less` for `workers_deployments_list`.
+- **The policy engine's own check**: a per-tool rule that names an argument the tool does not have does not load, and the run prints the per-tool warning. That tells you a name is wrong, not which one.
+
+## `has`: testing an optional argument first
+
+Cedar refuses to read a field that may be absent. A rule that reads an optional argument directly, such as `context.input.path.account_id == "..."` without a test, cannot be loaded. `has` is the test: `context.input.path has account_id` is true when the call carries the argument. Combine the two with `&&`, test first:
+
+```text
+context.input.path has account_id && context.input.path.account_id == "0123456789abcdef0123456789abcdef"
+```
+
+`&&` stops at the first false part, so the comparison is only made when the argument is there.
+
+What happens when you get this wrong was measured on a small test server (not on Cloudflare's): a per-tool rule that read an optional argument without `has` printed the per-tool warning, and every call to that tool was then refused `[default-deny]`. With `has` added, the rule loaded and refused only the calls it was written for.
+
+## Why an argument rule is written `forbid ... unless`
+
+The security engineer's sentence is "`workers_deployments_list` may run on the workshop's account only". The rule that says it:
+
+```text
+forbid (principal, action == cloudflare::Action::"workers_deployments_list", resource)
+unless { context.input.path has account_id && context.input.path.account_id == "0123456789abcdef0123456789abcdef" };
+```
+
+Read it: "refuse this tool, unless the call carries the workshop's account". Three reasons it is a `forbid`, not a `permit`:
+
+1. **A permit cannot narrow a permit.** `mcp_cloudflare_call` already permits every tool, so a `permit` for one account adds nothing ([Policy basics](/part-3/policy-basics/#a-permit-only-widens)).
+2. **A per-tool permit that does not match falls back to the server's permit.** The kit's note on this rule says it plainly: a per-tool rule that does not match falls back to the server's `mcp:call` permit. Another account would get through.
+3. **It fails closed.** The rule names the tool in its head. If it ever fails to load (a typo in `path` or `account_id`), Box refuses every call to that tool instead of letting them all through. A call with no `account_id` at all is refused too: `has` is false, so the `unless` does not save it.
+
+<Why title="Why the per-tool action, not mcp:call">
+The arguments are only in `context.input` of the per-tool action. An `mcp:call` sees the server, the method and the tool's name, never what it is called with.
+
+<Fragment slot="alternative">
+Leave arguments alone and steer the model instead, as act b3 did with its sentence. That works for one person at one prompt. A rule holds for every prompt, including the ones nobody thought of.
+</Fragment>
+</Why>
+
+<Aside type="caution" title="Argument rules wait for the catalog">
+A per-tool rule cannot be checked until Box has staged the catalog, so `box profile show` does not catch a wrong argument name. Read the terminal after the first run: no per-tool warning means the rule loaded.
+</Aside>
+
+## Which arguments are safe to write rules on
+
+Write argument rules on arguments with plain types, such as strings in a fixed place like `path.account_id`. `workers_deployments_list` matched its generated type in every measured run. Arguments with more complex types (several possible types, objects with no listed properties, dates, fractional numbers) were not tested in this workshop. Keep argument rules on the simple ones until you have run them.
+
+## The two seats
+
+<Seat who="security">
+The policy can now read what a tool is called with, with types the server itself declared. A constraint like "this account only" becomes one line, and a mistake in it refuses rather than allows. What the security engineer cannot do with the box CLI is look up the generated types; the names come from the API reference, the event stream and the per-tool warning.
+</Seat>
+<Seat who="developer">
+For the agent nothing changes until it asks for the wrong account. Then it gets the rule's description as an error, names the rule, and can ask for the right account instead. The cost per run stays the cost of the per-endpoint catalog.
+</Seat>
+
+## What to remember
+
+- A tool call is two decisions: `mcp:call` (server, method, tool), then the tool's own action, where `context.input` holds its arguments.
+- Box types the arguments from the tool's input description; an argument not marked required is optional and needs `has`.
+- The box CLI cannot print the generated schema. Use the free check's tool list, the API reference and the run's event stream.
+- Write an argument rule as `forbid ... unless`: a permit adds nothing, and the forbid fails closed.
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp-policy.md" source="Box docs">Write policy for an MCP server: per-tool actions, argument types, fail-closed rules</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy/actions.md" source="Box docs">Action reference: generated MCP tool actions</ReadMore>
+<ReadMore href="https://docs.cedarpolicy.com/policies/syntax-operators.html" source="Cedar docs">Operators: has, &&, ==</ReadMore>
+<ReadMore href="https://docs.cedarpolicy.com/policies/syntax-datatypes.html" source="Cedar docs">Data types: records, strings, Long</ReadMore>
+<ReadMore href="https://json-schema.org/understanding-json-schema/reference/object" source="JSON Schema">Objects, properties and required</ReadMore>
+<ReadMore href="https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/" source="Cloudflare docs">API reference: List Deployments</ReadMore>

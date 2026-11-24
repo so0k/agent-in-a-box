@@ -1,0 +1,68 @@
+---
+/**
+ * "What you should see": expected output or Box decision lines.
+ * variant="permit" for a permitted result, "refuse" for a refusal, "neutral" (default) otherwise.
+ *
+ * Usage (MDX):
+ *   <Expect variant="refuse">
+ *   ```text
+ *   deny  execute  cloudflare/execute  forbid_execute  a forbid rule matched
+ *   ```
+ *   </Expect>
+ */
+interface Props {
+	variant?: 'neutral' | 'permit' | 'refuse';
+	/** Optional heading text; defaults by variant. */
+	title?: string;
+}
+const { variant = 'neutral', title } = Astro.props;
+const label =
+	title ??
+	(variant === 'permit'
+		? 'What you should see: permitted'
+		: variant === 'refuse'
+			? 'What you should see: refused'
+			: 'What you should see');
+---
+
+<div class:list={['aib-expect', `aib-expect-${variant}`]} role="note" aria-label={label}>
+	<span class="aib-label">
+		{variant === 'permit' && <span class="aib-expect-mark" aria-hidden="true">&#10003;</span>}
+		{variant === 'refuse' && <span class="aib-expect-mark" aria-hidden="true">&#10005;</span>}
+		{label}
+	</span>
+	<div class="aib-expect-body"><slot /></div>
+</div>
+
+<style>
+	.aib-expect {
+		margin-top: 1.25rem;
+		border: 1px solid var(--aib-outline);
+		border-left-width: 4px;
+		border-radius: var(--aib-radius);
+		padding: 0.75rem 1rem;
+	}
+	.aib-expect-neutral {
+		border-left-color: var(--sl-color-gray-3);
+	}
+	.aib-expect-permit {
+		border-left-color: var(--sl-color-accent);
+		background: var(--aib-permit-bg);
+	}
+	.aib-expect-permit .aib-label {
+		color: var(--sl-color-accent);
+	}
+	.aib-expect-refuse {
+		border-left-color: var(--aib-refuse);
+		background: var(--aib-refuse-bg);
+	}
+	.aib-expect-refuse .aib-label {
+		color: var(--aib-refuse);
+	}
+	.aib-expect-mark {
+		margin-right: 0.4rem;
+	}
+	.aib-expect-body :global(> :first-child) {
+		margin-top: 0;
+	}
+</style>

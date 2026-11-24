@@ -1,0 +1,149 @@
+---
+title: "One tool per operation: the per-endpoint catalog"
+description: "The per-endpoint mode with 3,053 tools, how Box stages and types the catalog, tool search and the token cost."
+sidebar:
+  label: "The per-endpoint catalog"
+  order: 1
+  badge:
+    text: "Concept"
+    class: "aib-badge aib-badge-concept"
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import { PartProgress, Pieces, ReadMore, Seat, BarChart } from '~/components';
+
+<PartProgress current="part-4/per-endpoint-catalog" />
+
+After this page you will know what changes when Cloudflare's MCP server offers one tool per API operation instead of one `execute` tool: what Box does with 3,053 tools before the agent may use any of them, why that takes about a minute, and what the tool names alone cost in tokens. The story needs it because act b2 showed that a rule on `execute` can only allow everything or nothing. With one tool per operation, the security engineer can name the operations the team agreed on.
+
+<Pieces stage={4} />
+
+New in the picture: the Cloudflare MCP server is marked as changed (per-endpoint mode, 3,053 tools), and there is a new piece: the **tool catalog**, staged and typed per tool, which the egress gateway builds and the policy engine reads.
+
+## The same server, one tool per operation
+
+Cloudflare's MCP server at `https://mcp.cloudflare.com/mcp` has two modes. The default is code mode (Part 1): five tools, `search`, `docs`, `execute`, `whoami` and `submit_feedback`. Add `?codemode=false` to the address and the same server offers one tool per operation of Cloudflare's API. This is the **per-endpoint mode**.
+
+Each tool is named after its operation and takes the operation's parameters as arguments. Some names from the catalog, all of them in the list Claude Code received in the workshop's checks:
+
+| Tool | What the operation does (in the story) |
+|---|---|
+| `workers_legacy_scripts_list` | lists the Workers on the account |
+| `workers_deployments_list` | lists the deployments of one Worker, such as `box-poc-workshop` |
+| `workers_list`, `workers_get` | newer operations for the Worker list and one Worker |
+| `o11y_telemetry_query` | queries Workers Logs: the leaderboard's request lines and attendee events |
+| `d1_query` | runs SQL on a D1 database: the attendee registry |
+
+On 2026-11-21 the catalog held **3,053 tools**, and the free checks of this workshop on 2026-11-22 saw the same count. (The catalog grows: on 2026-11-14 it had 11 tools fewer, and a day later 9 fewer. Older notes give the older count.)
+
+For the security engineer this is the point of the mode. A request to read the logs is now a call to `o11y_telemetry_query`, a different name from a request to list deployments. A rule on tool names can tell them apart.
+
+## How Box stages the catalog
+
+When Box identifies an MCP server (the `[mcp.cloudflare]` table), it does not send its own request for the server's tools. It waits for the agent's request, `tools/list`, and reads the reply as it passes through the egress gateway. Then, before it hands the reply to the agent, it:
+
+1. builds one action per tool, such as `cloudflare::Action::"workers_deployments_list"`;
+2. turns each tool's input description into a typed schema, so a rule can read the tool's arguments (Part 4's [Rules on a tool's arguments](/part-4/policy-on-arguments/) uses this);
+3. gives the actions and schemas to the policy engine and loads the per-tool rules that were waiting for them;
+4. only then releases the reply.
+
+Box's design note gives the reason for the order: "a tool is not callable until the engine enforces its rules". This is called **staging** the catalog. With four tools it is instant. With 3,053 it is not.
+
+### About a minute of staging
+
+Measured: from Box's decision on `tools/list` to Claude Code's next request, 61.5 to 66.2 seconds on every newer local build, 65.9 seconds on the workshop's build in its first check, and 64.0 to 70.8 seconds in the free checks run while writing this workshop (one check whose per-tool rule never loaded took 162.8 seconds; whether the rule caused it was not checked). The catalog is 6,540,316 bytes. Generating the schemas offline used 6.03 seconds of CPU time (user time, not wall time) on the workshop's build, so the minute is not schema generation alone; where the rest goes was not measured.
+
+### What Claude Code's start timeout does about it
+
+Claude Code waits a limited time for an MCP server to start: the variable `MCP_TIMEOUT`, in milliseconds, 30,000 by default (Claude Code's environment variable reference). Box gives no sign that it is staging. So with the default, Claude Code gave up after 29.9 seconds and started with the server `pending` and 0 Cloudflare tools. The agent then had nothing to call.
+
+The fix is on Claude Code's side: set `MCP_TIMEOUT` in the agent's environment in the profile. Act b3 adds `MCP_TIMEOUT = "300000"` (300 seconds), and the server then connects with all 3,053 tools. Box has no setting for this.
+
+One more effect, measured: `box run` returns only when staging has ended, even when the agent gave up long before. In one check the agent stopped after about 30 seconds and `box run` returned at 150 seconds.
+
+## Why this part needs a local build
+
+Box's released command line refuses this catalog. Some tools describe their input with shared definitions that Box could not turn into a schema, and one bad tool stops schema generation for the whole server: of the 3,053 tools, 441 had such a definition. The installed box 0.1.8 failed with `unexpected token '-'` and refused every call to the server. The workshop's box is built from public Box source plus a fix for exactly this, which is not released. [Builds and gaps](/results/builds-and-gaps/) says what the build is and how to make one.
+
+## Tool search: names first, definitions on demand
+
+An agent's request to the model carries the definition of every tool it may use. For 3,053 tools that does not fit.
+
+- **Every definition up front.** The definitions of the catalog count 2,382,210 tokens (measured with Anthropic's token counter on the list of 2026-11-14, 11 tools fewer). With tool search off, Claude Code's first request was refused by the API: "Prompt is too long ... the request is ~2246167 tokens (limit 1000000)". The run cost nothing and did nothing.
+- **Tool search.** Claude Code can instead send only the tool names, plus one built-in tool, `ToolSearch`. When the model wants a tool, it calls `ToolSearch` with the name, and Claude Code loads that one definition. In act b3 the model's first call is, for example, `ToolSearch` with `select:mcp__cloudflare__workers_deployments_list`.
+
+Tool search still sends every name on every request. The names alone are 75,349 tokens (list of 2026-11-14), and the first request of a b3 run is about 78,600 input tokens before the agent has done anything.
+
+Two Claude Code flags change in Part 4 because of this. `--tools ToolSearch` leaves `ToolSearch` as the only built-in tool. `--bare`, used until now, also removes `ToolSearch` (measured: no tools at all with `--bare --tools ToolSearch`), so Part 4 uses `--setting-sources ""` instead to keep the reader's own settings out.
+
+### What the tool list costs
+
+The sizes differ by more than a factor of 100, so they are a table, not a chart:
+
+| What the model is sent | Code mode | Per-endpoint mode | Source |
+|---|---|---|---|
+| All tool definitions | 3,510 tokens | 2,382,210 tokens | Anthropic token counter, 2026-11-14 |
+| Tool names only (tool search) | not measured (the names are 26 bytes) | 75,349 tokens | same |
+| First request of a run, input tokens | 1,306 to 1,316 | 78,588 to 78,593 | Claude Code's own usage figures |
+
+The code-mode figures were counted on the 4 tools of that day; the per-endpoint figures on the list of 2026-11-14, 11 tools fewer than today. Neither was re-counted for 3,053 tools.
+
+The whole run shows the same thing. The chart puts the two acts side by side, one run per task:
+
+<BarChart
+  title="Input tokens of the whole run, code mode (b2) against per-endpoint mode (b3, b3-args)"
+  unit="tokens"
+  source="b2 and b3-args: the workshop's build (pkg-fix). b3: an earlier local build (pkg). Claude Code 2.1.330, claude-sonnet-5-5, one run each."
+  data={[
+    { label: 'b2, allowed task', value: 4826, note: 'refused' },
+    { label: 'b2, logs task', value: 75732, note: 'refused' },
+    { label: 'b3, allowed task', value: 241478, note: 'partly refused' },
+    { label: 'b3, logs task', value: 248292, note: 'refused' },
+    { label: 'b3, steering sentence', value: 239979, note: 'done' },
+    { label: 'b3-args', value: 320678, note: 'one refused, one done' },
+  ]}
+/>
+
+<BarChart
+  title="Cost of the whole run (USD)"
+  unit="USD"
+  decimals={4}
+  source="Claude Code's own total_cost_usd. Same runs as above."
+  data={[
+    { label: 'b2, allowed task', value: 0.0090 },
+    { label: 'b2, logs task', value: 0.0729 },
+    { label: 'b3, allowed task', value: 0.2278 },
+    { label: 'b3, logs task', value: 0.2357 },
+    { label: 'b3, steering sentence', value: 0.2188 },
+    { label: 'b3-args', value: 0.2354 },
+  ]}
+/>
+
+Most of a b3 run's input is the tool names: a run writes them to the prompt cache on the first turn (about 77,000 to 82,000 tokens) and reads them back on every later turn (about 160,000 to 240,000 tokens over three or four turns). Every per-endpoint run cost between $0.22 and $0.24, whatever the task.
+
+<Aside type="note">
+Acts a, b1 and b2 run with `--tools ""`, which also turns tool search off. With five tools that costs a few hundred tokens, which is why code mode never needed it.
+</Aside>
+
+## The two seats
+
+<Seat who="security">
+Each API operation now has its own name, and Box gives each one a typed action before the agent may call it. A rule can allow `workers_deployments_list` and refuse `o11y_telemetry_query`, and the records will say which tool was refused. The policy can also read each tool's arguments, which act b3-args uses. What the policy still cannot see is what an allowed tool returns.
+</Seat>
+<Seat who="developer">
+Every run in this mode waits about a minute before the agent has its tools, and needs `MCP_TIMEOUT` raised or it starts with none. Every run costs about $0.22 to $0.24 because of the tool names, against about $0.01 to $0.07 for act b2 in code mode. And it needs a local build of Box.
+</Seat>
+
+## What to remember
+
+- `?codemode=false` turns Cloudflare's one `execute` tool into 3,053 tools, one per operation.
+- Box stages the catalog before the agent sees it: one typed action per tool, loaded into the policy engine first. That takes about a minute.
+- Claude Code's `MCP_TIMEOUT` (30 seconds by default) must be raised in the profile, or the agent starts with no Cloudflare tools.
+- With tool search the names alone are about 75,000 tokens on every request; without it the request is too large for the model.
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/mcp-discovery.md" source="Box docs">How Box discovers and stages an MCP server's tools</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp.md" source="Box docs">MCP server configuration</ReadMore>
+<ReadMore href="https://code.claude.com/docs/en/mcp" source="Claude Code docs">MCP in Claude Code, including tool search</ReadMore>
+<ReadMore href="https://code.claude.com/docs/en/env-vars" source="Claude Code docs">Environment variables, including MCP_TIMEOUT</ReadMore>
+<ReadMore href="https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/" source="Cloudflare docs">Cloudflare's own MCP servers</ReadMore>
+<ReadMore href="/results/builds-and-gaps/" source="This workshop">Builds and gaps: the local build this part needs</ReadMore>

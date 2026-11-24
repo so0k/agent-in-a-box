@@ -1,0 +1,64 @@
+---
+/**
+ * One step of building a profile or a policy: what we add, the run, what we see.
+ * Put the file (editor frame, inserted lines marked with ins={...}), the command
+ * and the <Expect> block inside, in that order. Use the three headings below as
+ * bold lead-ins so every iteration reads the same way.
+ *
+ * Usage (MDX):
+ *   <Iteration n={2} title="Give the agent a model key">
+ *   **What we add.** ...
+ *   ```toml title="profile.toml" ins={5-7}
+ *   ...
+ *   ```
+ *   **The run.** ...
+ *   **What we see.** ...
+ *   </Iteration>
+ */
+interface Props {
+	/** The step number within this page's build-up. */
+	n: number;
+	/** What this step adds, in a few words. */
+	title: string;
+}
+const { n, title } = Astro.props;
+---
+
+<section class="aib-iteration" aria-label={`Iteration ${n}: ${title}`}>
+	<header class="aib-iteration-head">
+		<span class="aib-iteration-n">Iteration {n}</span>
+		<span class="aib-iteration-title">{title}</span>
+	</header>
+	<div class="aib-iteration-body"><slot /></div>
+</section>
+
+<style>
+	.aib-iteration {
+		margin-top: 2rem;
+		border: 1px solid var(--aib-outline);
+		border-radius: var(--aib-radius);
+	}
+	.aib-iteration-head {
+		display: flex;
+		gap: 0.75rem;
+		align-items: baseline;
+		padding: 0.6rem 1.25rem;
+		background: var(--aib-panel-bg);
+		border-radius: var(--aib-radius);
+	}
+	.aib-iteration-n {
+		font-size: var(--sl-text-sm);
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--sl-color-accent);
+		white-space: nowrap;
+	}
+	.aib-iteration-title {
+		font-weight: 600;
+		color: var(--sl-color-white);
+	}
+	.aib-iteration-body {
+		padding: 0.25rem 1.25rem 1.25rem;
+	}
+</style>

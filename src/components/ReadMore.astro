@@ -1,0 +1,65 @@
+---
+/**
+ * A "read more" link line. Several in a row group into one list.
+ *
+ * Usage (MDX):
+ *   <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/egress.md" source="Box docs">Egress and credentials</ReadMore>
+ */
+import { getCollection } from 'astro:content';
+
+interface Props {
+	href: string;
+	/** Who publishes the page: "Box docs", "Cedar docs", "Cloudflare docs", "This repository" ... */
+	source: string;
+}
+const { href, source } = Astro.props;
+const external = /^https?:\/\//.test(href);
+// Links inside components are not seen by starlight-links-validator, so check
+// internal links here: a link to a page that does not exist stops the build.
+// The base-links integration has already put the base in front of href.
+if (!external) {
+	const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+	const inSite = href.startsWith(`${base}/`);
+	const path = href.split('#')[0].slice(base.length).replace(/^\/|\/$/g, '');
+	const slugs = (await getCollection('docs')).map((e) => (e.id === 'index' ? '' : e.id));
+	if (!inSite || !slugs.includes(path)) throw new Error(`<ReadMore>: internal link "${href}" does not match a page`);
+}
+---
+
+<p class="aib-readmore">
+	<span class="aib-readmore-kicker">Read more</span>
+	<a href={href} {...external ? { rel: 'noopener' } : {}}><slot /></a>
+	<span class="aib-readmore-source">{source}</span>
+</p>
+
+<style>
+	.aib-readmore {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 0.75rem;
+		align-items: baseline;
+		margin-top: 1rem;
+		padding: 0.4rem 0 0.4rem 0.9rem;
+		border-left: 2px solid var(--aib-line);
+	}
+	:global(.aib-readmore + .aib-readmore) {
+		margin-top: 0 !important;
+	}
+	.aib-readmore-kicker {
+		font-size: var(--sl-text-xs);
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--sl-color-gray-3);
+	}
+	.aib-readmore-source {
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-3);
+	}
+	.aib-readmore-source::before {
+		content: '(';
+	}
+	.aib-readmore-source::after {
+		content: ')';
+	}
+</style>

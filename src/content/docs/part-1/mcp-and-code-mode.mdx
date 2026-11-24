@@ -1,0 +1,125 @@
+---
+title: "MCP servers and code mode"
+description: "What an MCP server is, Cloudflare's server, the design of code mode and its execute tool, and what it costs in tokens."
+sidebar:
+  label: "MCP and code mode"
+  order: 1
+  badge:
+    text: "Concept"
+    class: "aib-badge aib-badge-concept"
+---
+
+import { PartProgress, Pieces, Seat, BarChart, ReadMore } from '~/components';
+
+<PartProgress current="part-1/mcp-and-code-mode" />
+
+After this page you will know how Claude Code reaches Cloudflare: through an MCP server, and on that server through two tools called `search` and `execute`. The story needs this first, because every later part changes one thing about this path, and the most important fact about it is where the API call actually happens.
+
+<Pieces stage={1} />
+
+This is the set-up with no sandbox. The developer's terminal starts Claude Code, Claude Code talks to the Anthropic API for the model and to Cloudflare's MCP server for the account, and the server talks to the Cloudflare API, behind which the sample app runs. Nothing on this picture decides anything on behalf of the security engineer.
+
+## What an MCP server is
+
+The Model Context Protocol (MCP) is an open protocol that lets an agent use tools that someone else provides. An **MCP server** is a program, local or remote, that offers a list of tools. An **MCP client**, here Claude Code, connects to it, asks for the list (the `tools/list` request) and calls a tool by name with arguments (the `tools/call` request).
+
+Each tool in the list has a name, a description written for the model, and a JSON schema for its arguments. Claude Code puts these definitions into its requests to the model, so the model knows what it can call. That is the cost to remember: every tool definition the client sends is input tokens, on every model request.
+
+A server can run on your own machine and speak over its standard input and output (a "stdio" server), or run somewhere else and speak over HTTP (a "remote" server). Cloudflare's server is remote. The workshop meets a local one in Part 5.
+
+## Cloudflare's MCP server
+
+Cloudflare runs an MCP server at `https://mcp.cloudflare.com/mcp`. It covers the Cloudflare API: Workers, D1, KV, Workers Logs and the rest. It authenticates with a Cloudflare API token sent as `Authorization: Bearer <token>`, and every call it makes to the API uses that token.
+
+In this workshop the token is `CLOUDFLARE_MCP_TOKEN`, the second of the three secrets from [Set-up](/start/setup/). It is deliberately broad: it can read the Worker's logs and delete Workers. That choice is on purpose, so that every refusal later in the workshop is Box's and not Cloudflare's.
+
+The server can present the same API in two ways:
+
+| Mode | URL | Tools in `tools/list` | Used in |
+|---|---|---|---|
+| Code mode (the default) | `/mcp` | `search`, `execute`, `docs`, `whoami` (four when the sizes below were measured on 2026-11-14; a fifth, `submit_feedback`, appeared in the curriculum's check with Claude Code 2.1.330) | Parts 1 to 3 |
+| Per-endpoint mode | `/mcp?codemode=false` | one tool per API operation: 3,053 on 2026-11-21 | Part 4 |
+
+## The design of code mode
+
+### Why two tools instead of one per operation
+
+The Cloudflare API is large. Cloudflare's own post on the design says the API has over 2,500 endpoints, and that one tool per endpoint would take far too much of the model's context. So instead of a tool per operation, code mode offers a fixed pair of tools whose size does not grow with the API. The post gives "around 1,000 tokens" for the whole API. What was measured here for the four-tool list is 3,510 tokens of definitions (Anthropic's `count_tokens` endpoint, 2026-11-14), still a fixed and small number.
+
+The idea is not Cloudflare's alone. Some servers call the same tool `execute_script`. In this workshop the tool is called `execute`, as Cloudflare names it.
+
+### How the agent uses it
+
+The agent works in three steps:
+
+1. **Search the API description.** `search` takes a JavaScript function. The server runs it with `spec` in scope: Cloudflare's OpenAPI description, with every path and method. The function filters it, for example for every path tagged `workers`, and returns only what it found. The full description never enters the model's context.
+2. **Write a script.** From what it found, the model writes a second JavaScript function that calls `cloudflare.request({ method, path, query, body })` once or several times: list the Workers, then read one Worker's deployments, then summarise.
+3. **Run it.** `execute` takes that function and runs it. The result of the function comes back as the tool's result.
+
+The arguments of both tools are the same shape: a string called `code`. The tool schemas of the local exec proxy in Part 5 are copied from Cloudflare's, so you will meet exactly these names and arguments again.
+
+### What it saves, measured
+
+The numbers below are from one run per cell, model `claude-sonnet-5-5` (all runs are listed on [Measurements](/results/measurements/)). Both runs are the allowed task: list the Workers and summarise the deployment of `box-poc-workshop`. The code mode run is act a, which you run next, without a box (Claude Code 2.1.325, 2026-11-14). The per-endpoint run is act b3 from Part 4, shown here only to compare. Its first request is from the installed box 0.1.8 run (Claude Code 2.1.325, 2026-11-14). Its cost is from the local build pkg (Claude Code 2.1.330, 2026-11-21), which accepted the catalog: the allow-list refused `workers_list`, and the deployment part was answered. On box 0.1.8 every call was refused, so that run's USD 0.2216 is the cost of loading the catalog and failing, not of doing the task.
+
+<BarChart
+  title="Input tokens of the first model request, allowed task"
+  unit="tokens"
+  source="Measurements page, the tool list section (first request as billed, all kinds of input tokens)"
+  data={[
+    { label: 'Code mode (act a)', value: 1316 },
+    { label: 'Per-endpoint, tool search on (act b3)', value: 78593 },
+  ]}
+/>
+
+<BarChart
+  title="Cost of the whole run, allowed task (USD)"
+  unit="USD"
+  decimals={4}
+  source="Measurements page, Claude Code's own result figures: act a with no box (Claude Code 2.1.325); act b3 on the build pkg (Claude Code 2.1.330)"
+  data={[
+    { label: 'Code mode (act a, no box)', value: 0.0160, note: '2 turns, 1 execute, done' },
+    { label: 'Per-endpoint (act b3, pkg)', value: 0.2278, note: '4 turns, partly: deployments answered' },
+  ]}
+/>
+
+The sizes of the tool lists themselves, without a model run:
+
+| Tool list | Tools | `tools/list` bytes | Tokens of all definitions (`count_tokens`) |
+|---|---|---|---|
+| Code mode | 4 | 9,831 | 3,510 |
+| Per-endpoint, measured on the list of 2026-11-14 | 11 fewer than today's 3,053 | 6,425,434 | 2,382,210 (the names alone: 75,349) |
+
+The per-endpoint figures were measured on the list of 2026-11-14, which had 11 tools fewer; the catalog has 3,053 today, and its tokens were not measured again. Two cautions on the act a numbers. Act a runs with `--tools ""`, which also removes Claude Code's tool search, so all definitions go into each request; with four tools that makes a difference of a few hundred tokens (the author's measurement notes, not published). And the comparison is one run per cell, not an average.
+
+## Where the API call happens
+
+This is the fact the rest of the workshop turns on. Both tools run **on Cloudflare's side**. Cloudflare's post says the generated code runs inside a Dynamic Worker isolate, "a lightweight V8 sandbox with no file system", on their servers. So when the agent calls `execute`, what leaves the developer's machine is one MCP request with a script in it. The request to `api.cloudflare.com` that reads the Worker's logs is made by Cloudflare's server, with the token it was given, out of sight of the developer's machine.
+
+On this page's picture that is the line from the Cloudflare MCP server to the Cloudflare API. Whatever sits around Claude Code later, a sandbox, a gateway, a policy, can see the `execute` call. It cannot see what the script did after it left.
+
+<Seat who="security">
+
+Code mode puts the whole API behind one tool. A control that decides by tool name has two choices for `execute`: allow every API operation, or none. The script is an argument, and nothing on the developer's machine can tell from it which API requests will run, because they run elsewhere. Keep this in mind for Part 2, where Box sees exactly one `execute` call, and Part 3, where you refuse it.
+
+</Seat>
+
+<Seat who="developer">
+
+Code mode is cheap and capable. The agent finds the operation it needs, does a multi-step job in one script, and the tool list costs a few thousand tokens however large the API is. The allowed task took 2 turns and 0.0160 USD. Anything that takes code mode away will cost you either usefulness or tokens; Parts 3 and 4 show both.
+
+</Seat>
+
+## What to remember
+
+- An MCP server offers tools; the client sends every tool definition to the model, so the size of the tool list is paid on every request.
+- Cloudflare's code mode offers `search` and `execute` instead of one tool per operation (3,053 today), which keeps the tool list small.
+- The agent searches the API description, writes a script, and runs it with `execute`.
+- The script, and every API request it makes, runs on Cloudflare's side.
+
+<ReadMore href="https://modelcontextprotocol.io/docs/learn/architecture" source="MCP specification">MCP architecture overview</ReadMore>
+<ReadMore href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools" source="MCP specification">Tools: tools/list and tools/call</ReadMore>
+<ReadMore href="https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/" source="Cloudflare docs">Cloudflare's own MCP servers</ReadMore>
+<ReadMore href="https://blog.cloudflare.com/code-mode-mcp/" source="Cloudflare blog">Code Mode: give agents an entire API in 1,000 tokens</ReadMore>
+<ReadMore href="https://blog.cloudflare.com/code-mode/" source="Cloudflare blog">Code Mode: the better way to use MCP</ReadMore>
+<ReadMore href="https://code.claude.com/docs/en/mcp" source="Claude Code docs">MCP in Claude Code, and tool search</ReadMore>

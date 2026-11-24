@@ -1,0 +1,41 @@
+---
+/**
+ * One flag or argument of the command inside a <Command>.
+ * The slot says what it does, why it is set here, and what leaving it out would do.
+ *
+ * Usage (MDX), inside <Command>, after the code block:
+ *   <Flag name="--no-banner">Gives the agent the whole terminal.</Flag>
+ */
+interface Props {
+	/** The flag as typed, for example `--max-turns 10`. */
+	name: string;
+}
+const { name } = Astro.props;
+---
+
+<div class="aib-flag">
+	<code class="aib-flag-name">{name}</code>
+	<div class="aib-flag-body"><slot /></div>
+</div>
+
+<style>
+	.aib-flag {
+		display: grid;
+		grid-template-columns: minmax(8rem, max-content) 1fr;
+		gap: 0.25rem 1rem;
+		margin-top: 0.4rem;
+	}
+	.aib-flag-name {
+		font-weight: 600;
+		white-space: nowrap;
+		align-self: start;
+	}
+	.aib-flag-body :global(> :first-child) {
+		margin-top: 0;
+	}
+	@media (max-width: 40rem) {
+		.aib-flag {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

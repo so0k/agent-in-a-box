@@ -1,0 +1,49 @@
+---
+/**
+ * "Why this setting here": the reason for one setting, flag or rule.
+ * The optional `alternative` slot says what the other choice would do.
+ *
+ * Usage (MDX):
+ *   <Why>
+ *   We pin the model so every act is measured on the same one.
+ *   <Fragment slot="alternative">Leaving it out lets Claude Code pick its default model.</Fragment>
+ *   </Why>
+ */
+interface Props {
+	/** Optional heading text; defaults to "Why this setting here". */
+	title?: string;
+}
+const { title = 'Why this setting here' } = Astro.props;
+const hasAlt = Astro.slots.has('alternative');
+---
+
+<aside class="aib-why aib-panel" aria-label={title}>
+	<span class="aib-label">{title}</span>
+	<div class="aib-why-body"><slot /></div>
+	{
+		hasAlt && (
+			<div class="aib-why-alt">
+				<span class="aib-label">The alternative</span>
+				<div>
+					<slot name="alternative" />
+				</div>
+			</div>
+		)
+	}
+</aside>
+
+<style>
+	.aib-why {
+		margin-top: 1.25rem;
+		border-left: 3px solid var(--sl-color-accent);
+	}
+	.aib-why-body :global(> :first-child),
+	.aib-why-alt :global(> div > :first-child) {
+		margin-top: 0;
+	}
+	.aib-why-alt {
+		margin-top: 0.85rem;
+		padding-top: 0.75rem;
+		border-top: 1px dashed var(--aib-line);
+	}
+</style>

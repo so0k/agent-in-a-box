@@ -1,0 +1,94 @@
+---
+/**
+ * The sentence the reader types to the agent (not to the shell).
+ * Shown as a quoted prompt with its own copy button.
+ *
+ * Usage (MDX):
+ *   <Prompt>List the Workers on Cloudflare account 0123456789abcdef0123456789abcdef and summarise the current deployment of the Worker box-poc-workshop.</Prompt>
+ */
+interface Props {
+	/** Optional label; defaults to "Type this to the agent". */
+	label?: string;
+}
+const { label = 'Type this to the agent' } = Astro.props;
+---
+
+<figure class="aib-prompt">
+	<figcaption class="aib-label">{label}</figcaption>
+	<div class="aib-prompt-row">
+		<blockquote class="aib-prompt-text"><slot /></blockquote>
+		<button type="button" class="aib-prompt-copy" aria-label="Copy the prompt">Copy</button>
+	</div>
+</figure>
+
+<script>
+	for (const btn of document.querySelectorAll<HTMLButtonElement>('.aib-prompt-copy')) {
+		btn.addEventListener('click', async () => {
+			const text = btn.closest('.aib-prompt')?.querySelector('.aib-prompt-text')?.textContent?.trim() ?? '';
+			try {
+				await navigator.clipboard.writeText(text);
+				btn.textContent = 'Copied';
+			} catch {
+				btn.textContent = 'Copy failed';
+			}
+			setTimeout(() => (btn.textContent = 'Copy'), 1500);
+		});
+	}
+</script>
+
+<style>
+	.aib-prompt {
+		margin: 1.25rem 0 0;
+	}
+	.aib-prompt-row {
+		display: flex;
+		gap: 0.75rem;
+		align-items: flex-start;
+		border: 1px solid var(--sl-color-accent);
+		border-radius: 1rem 1rem 1rem 0.25rem;
+		background: var(--aib-permit-bg);
+		padding: 0.85rem 1rem 0.85rem 1.25rem;
+	}
+	.aib-prompt-text {
+		flex: 1;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		font-size: var(--sl-text-lg);
+		line-height: 1.6;
+		color: var(--sl-color-white);
+		font-style: normal;
+	}
+	.aib-prompt-text :global(p) {
+		margin: 0;
+	}
+	.aib-prompt-text::before {
+		content: '\201C';
+		color: var(--sl-color-accent);
+		margin-right: 0.1rem;
+	}
+	.aib-prompt-text::after {
+		content: '\201D';
+		color: var(--sl-color-accent);
+	}
+	.aib-prompt-text :global(p) {
+		display: inline;
+	}
+	.aib-prompt-copy {
+		flex: none;
+		cursor: pointer;
+		font: inherit;
+		font-size: var(--sl-text-sm);
+		font-weight: 600;
+		padding: 0.25rem 0.7rem;
+		border: 1px solid var(--sl-color-accent);
+		border-radius: 0.25rem;
+		background: transparent;
+		color: var(--sl-color-accent);
+	}
+	.aib-prompt-copy:hover,
+	.aib-prompt-copy:focus-visible {
+		background: var(--sl-color-accent);
+		color: var(--sl-color-black);
+	}
+</style>

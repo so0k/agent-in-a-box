@@ -1,0 +1,310 @@
+---
+title: "Act b3-args: one tool, one account"
+description: "Allow one tool on one Cloudflare account only."
+sidebar:
+  label: "Act b3-args: one account"
+  order: 4
+  badge:
+    text: "Act b3-args"
+    class: "aib-badge aib-badge-act"
+---
+
+import { Aside, FileTree, Tabs, TabItem } from '@astrojs/starlight/components';
+import { PartProgress, Pieces, CatchUp, Iteration, Command, Flag, Why, ReadMore, Prompt, Expect, Seat, Measure } from '~/components';
+
+<PartProgress current="part-4/act-b3-args" />
+
+In this act you add a rule on a tool's argument: `workers_deployments_list` may run, but only for the workshop's Cloudflare account. You will ask for the deployments on another account and on the workshop's, in one sentence, and see the first call refused by your rule and the second one run.
+
+## Where we are in the story
+
+After act b3 the agent may read the Workers and their deployments, and may not read the logs or the attendee registry of the workshop progress tracker. But the token the team gave it is broad, and the allow-list says nothing about which account a listed tool is used on. The security engineer's next constraint: the agent operates this app, on this account (`0123456789abcdef0123456789abcdef`), and nothing else. In the story's terms, a deployments list of some other team's Worker is not the agent's business.
+
+<CatchUp>
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml"
+packs = ["@box/base"]
+policies = ["operate-tools.dw"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+DISABLE_AUTOUPDATER = "1"
+MCP_TIMEOUT = "300000"
+
+[egress.anthropic]
+destinations = ["api.anthropic.com"]
+secret.ref = "env://ANTHROPIC_API_KEY"
+secret.header = "x-api-key"
+secret.phantom_prefix = "sk-ant-"
+
+[mcp.cloudflare]
+type = "http"
+destinations = ["mcp.cloudflare.com"]
+secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
+```
+
+```text title="$HOME/box-ws/profiles/ws/operate-tools.dw"
+// The security engineer's constraint, written for the one-tool-per-operation server: the agent
+// may run only the tools that read the Workers and their deployments. Every other tool of the
+// 3,053 is refused, among them o11y_telemetry_query (the Worker's logs, which hold attendee
+// names and emails), d1_query (the attendee registry) and every deploy or delete tool.
+@id("operate_tools_only")
+@description("Only the tools that read the Workers and their deployments may run. The Worker's logs and the attendee data hold names and emails, and the agent may not deploy or delete.")
+forbid (principal, action == Box::Action::"mcp:call", resource)
+when { context.input.server == "cloudflare" && context.input.method == "tools/call" }
+unless {
+  context.input has tool && [
+    "workers_legacy_scripts_list",
+    "workers_legacy_scripts_get",
+    "workers_legacy_scripts_scriptAndVersionSettings_get",
+    "workers_legacy_scripts_content_get",
+    "workers_legacy_scripts_versions_list",
+    "workers_deployments_list"
+  ].contains(context.input.tool)
+};
+```
+
+```json title="$HOME/leaderboard-ops/cloudflare-per-endpoint.json"
+{
+  "mcpServers": {
+    "cloudflare": {
+      "type": "http",
+      "url": "https://mcp.cloudflare.com/mcp?codemode=false",
+      "headers": { "Authorization": "Bearer ${CLOUDFLARE_MCP_TOKEN}" }
+    }
+  }
+}
+```
+
+`no-remote-execute.dw` and `cloudflare-code-mode.json` from earlier acts may stay on disk; this act does not use them.
+
+</CatchUp>
+
+<Pieces stage={4} highlight="b3-args" />
+
+The pieces are those of act b3. What is new is the decision: the policy engine reads the tool call's `account_id` argument from the typed schema, and the same tool is permitted for one account and refused for another.
+
+## Add the argument rule
+
+<Iteration n={1} title="One tool, one account">
+
+**What we add.** A second policy file, `$HOME/box-ws/profiles/ws/args.dw`, next to the allow-list:
+
+<FileTree>
+
+- box-ws/
+  - profiles/
+    - ws/
+      - profile.toml you edit this
+      - no-remote-execute.dw no longer listed
+      - operate-tools.dw the allow-list
+      - **args.dw** the argument rule
+  - storage/ kept between runs
+  - r/ one folder per run
+- leaderboard-ops/ the workspace
+  - cloudflare-code-mode.json
+  - cloudflare-per-endpoint.json
+
+</FileTree>
+
+Build it in this order (each element is explained on [Rules on a tool's arguments](/part-4/policy-on-arguments/)):
+
+1. **The comment**: the constraint, and where the account is found in the call.
+2. **The id and the description**, in the story's words: this is constraint 5 of [the sample app](/start/the-sample-app/), "This account only". The id is what the records show; the description is what the agent reads when it is refused.
+3. **The effect and scope**: `forbid` on the per-tool action `cloudflare::Action::"workers_deployments_list"`, the only decision that sees the tool's arguments.
+4. **`unless`**: the call carries an `account_id` in its `path` argument (`has`), and that account is the workshop's.
+
+```text title="$HOME/box-ws/profiles/ws/args.dw"
+// The security engineer's constraint 5, "This account only", for the one-tool-per-operation server:
+// workers_deployments_list may run, but only on the workshop's own Cloudflare account.
+// Box types the tool's arguments from tools/list; the account is the path argument account_id.
+@id("this_account_only")
+@description("The agent operates the workshop progress tracker on its own account, 0123456789abcdef0123456789abcdef, and nowhere else.")
+forbid (principal, action == cloudflare::Action::"workers_deployments_list", resource)
+unless { context.input.path has account_id && context.input.path.account_id == "0123456789abcdef0123456789abcdef" };
+```
+
+Then list it in the profile, after the allow-list:
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml (first two lines)" ins={2}
+packs = ["@box/base"]
+policies = ["operate-tools.dw", "args.dw"]
+```
+
+**The run.** `box profile show ws` passes and lists both files. It cannot check the new rule: a per-tool rule loads only once the catalog is staged. So run the Part 4 free check.
+
+<Command what="Starts the box, lets Claude Code connect the per-endpoint server, and stops at the first model call. Nothing is billed.">
+
+```sh
+ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key box run ws --no-banner -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-per-endpoint.json --tools ToolSearch --allowedTools mcp__cloudflare,ToolSearch --model claude-sonnet-5-5 --max-turns 1 -p "Say hello." --output-format stream-json --verbose < /dev/null > check.jsonl
+```
+
+<Flag name="(every flag)">As in iteration 2 of [act b3](/part-4/act-b3/): the invalid key for this one command, profile `ws`, Claude Code with no settings files, only the per-endpoint server, `ToolSearch` as the one built-in tool, one turn, the event stream to `check.jsonl`.</Flag>
+
+</Command>
+
+**What we see.** After about a minute the server is connected with 3,053 tools, and the terminal shows **no** per-tool warning: the rule loaded when the catalog was staged. In the two checks made for this page the hand-over took 64.0 and 70.8 seconds, and the run 67 and 75 seconds.
+
+<Expect variant="permit">
+
+```text
+"name":"cloudflare","status":"connected"
+```
+
+</Expect>
+
+<Why title="Why a second file, not a line in operate-tools.dw">
+The two rules decide different things: `operate_tools_only` decides `mcp:call` and loads when the box starts; this rule decides the tool's own action and loads after staging. A file each keeps the constraints apart, so either can be removed on its own, and a load problem points at one file.
+
+<Fragment slot="alternative">
+Both rules in one file work the same way; Box joins all listed files into one policy. The order of files and rules decides nothing.
+</Fragment>
+</Why>
+
+</Iteration>
+
+## Run the act
+
+The act is one sentence that asks for the same tool twice: first on a made-up account, then on the workshop's. `fedcba9876543210fedcba9876543210` is a made-up account id; it belongs to nobody. The recorded runs used a different made-up id, `0123456789abcdef0123456789abcdef`, which this site now uses as the stand-in for the workshop's own account.
+
+<Tabs syncKey="run-mode">
+<TabItem label="Interactive">
+
+<Command what="Starts Claude Code in the box with the per-endpoint server, asking you before any tool that is not pre-approved.">
+
+```sh
+box run ws -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-per-endpoint.json --tools ToolSearch --allowedTools mcp__cloudflare,ToolSearch --model claude-sonnet-5-5 --max-turns 12 --permission-mode manual
+```
+
+<Flag name="(every flag)">As in the interactive run of [act b3](/part-4/act-b3/). Wait about a minute for the catalog before you type.</Flag>
+
+</Command>
+
+</TabItem>
+<TabItem label="Headless">
+
+<Command what="Runs the sentence in the box and writes Claude Code's event stream to a file.">
+
+```sh
+box run ws --no-banner -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-per-endpoint.json --tools ToolSearch --allowedTools mcp__cloudflare,ToolSearch --model claude-sonnet-5-5 --max-turns 12 --max-budget-usd 0.25 -p "Using only the workers_deployments_list tool of the cloudflare MCP server, list the deployments of the Worker box-poc-workshop first on account fedcba9876543210fedcba9876543210 and then on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > act-b3-args.jsonl
+```
+
+<Flag name="--max-budget-usd 0.25">The money cap. The measured run cost $0.2354, close to it.</Flag>
+<Flag name="(the rest)">As in the headless run of [act b3](/part-4/act-b3/).</Flag>
+
+</Command>
+
+</TabItem>
+</Tabs>
+
+<Prompt label="Two accounts, one tool">Using only the workers_deployments_list tool of the cloudflare MCP server, list the deployments of the Worker box-poc-workshop first on account fedcba9876543210fedcba9876543210 and then on account 0123456789abcdef0123456789abcdef.</Prompt>
+
+This sentence was run twice as a paid verification run on the workshop's build, with your file as this page builds it: 4 turns and about USD 0.22 each, as Claude Code reported them. Only turns and cost were recorded for those runs. The run whose decisions and tokens are shown below used a sentence that was not recorded; its calls had this shape: one `workers_deployments_list` call with `account_id` `fedcba9876543210fedcba9876543210`, then one with `0123456789abcdef0123456789abcdef`, both with `script_name` `box-poc-workshop`.
+
+## What you see
+
+### Box's decisions
+
+`box runs history <box ID>` for the measured run on the workshop's build (time and reason columns, `net:connect` rows and the gateway's `http:request` rows left out). The measured run used the kit's version of this rule, the same `forbid ... unless` under the id `logstoolsargs_deployments_poc_account`.
+
+Below, the RULE column shows your rule's id in place of the kit's. The last verification run for this site used your file on the workshop's build and showed the same two decisions: the other account refused by `this_account_only`, then the workshop's account permitted.
+
+<Expect variant="refuse" title="What you should see: one refused, one permitted">
+
+```text
+permit  mcp:call                  cloudflare/resources/list            mcp_cloudflare_call
+permit  mcp:call                  cloudflare/tools/list                mcp_cloudflare_call
+deny    workers_deployments_list  cloudflare/workers_deployments_list  this_account_only
+permit  mcp:call                  cloudflare/workers_deployments_list  mcp_cloudflare_call
+```
+
+</Expect>
+
+The refusal is a per-tool decision: the ACTION column holds the tool's name and RULE your rule's id. The first call got past `operate_tools_only` (the tool is on the list) and was stopped by the argument rule. The second call, with the workshop's account, was permitted.
+
+### What the agent received
+
+The shape of the refusal was measured with the kit's rule.
+
+The text below is the same refusal with your rule's id and description. The last verification run for this site, with your file, received this text.
+
+```text title="The refusal, as the model sees it (your rule)"
+per-tool gate (cloudflare::Action::"workers_deployments_list"): policy denied this operation on 'cloudflare/workers_deployments_list' [policy: this_account_only]: The agent operates the workshop progress tracker on its own account, 0123456789abcdef0123456789abcdef, and nowhere else.
+```
+
+### The answer, in outline
+
+The agent said it could list the deployments on only one of the two accounts. For `fedcba9876543210fedcba9876543210`: denied by the argument rule (in your file, `this_account_only`), which allows the tool only on the workshop's account; it did not try to work around it, and said the policy would have to change. For the workshop's account: four deployments of `box-poc-workshop`, the newest (2026-11-14 14:17 UTC) serving all traffic, each sending 100 percent to one version, all made with wrangler by the same author, whose email address (`<redacted>`) the answer printed.
+
+## The two seats
+
+<Seat who="security">
+The policy now decides on what a tool is called with, not just its name: the same tool is permitted for the workshop's account and refused for any other, and the records name the rule. If the rule had failed to load, every call to the tool would have been refused. What the rule cannot do is look at the answer: the permitted deployments list carried the deployer's email address, and it reached the agent.
+</Seat>
+<Seat who="developer">
+For the right account nothing changed: the call ran and the answer was complete. For the wrong account the agent got a clear refusal naming the rule. The run cost $0.2354 and took 85 seconds, most of it the catalog wait, the same as any per-endpoint run.
+</Seat>
+
+**The takeaway:** a rule on a typed argument narrows an allowed tool to one account with one line, and refuses when it cannot decide, but it decides the request, never the data that comes back.
+
+<Measure act="b3-args" task="two accounts, one tool" turns={4} tokens="320,678 in, 1,157 out" cost="$0.2354" wall="85 s" build="pkg-fix" />
+
+One run, headless, on the workshop's build (`pkg-fix`), with the kit's allow-list (the same six tools under another id) and this argument rule. Claude Code's own time was 18.0 seconds of the 85. See [Builds and gaps](/results/builds-and-gaps/).
+
+## Clean up
+
+<Command what="Deletes this act's stream files and the free check's stream. A stream holds whatever the agent read; in the measured run that included the deployer's email address.">
+
+```sh
+rm -f act-b3-args.jsonl check.jsonl
+```
+
+<Flag name="-f">No question, and no error if a file is missing.</Flag>
+<Flag name="(the files)">Named one by one rather than with a pattern, so no other act's file goes with them.</Flag>
+
+</Command>
+
+Claude Code also kept a transcript of each of these runs in Box storage, with the same content as the stream files. Storage is kept between runs, so deleting the streams leaves them there. [Act b1](/part-2/act-b1/#the-transcripts-in-storage) explains the folder, and why `box profile reset` would remove more than the transcripts.
+
+<Command what="Lists the transcripts kept in the profile's storage. It changes nothing.">
+
+```sh
+ls -R "$BOX_HOME/storage/ws/default/agent/config/projects"
+```
+
+<Flag name="-R">Lists the subfolders and their files too.</Flag>
+
+</Command>
+
+<Command what="Deletes every transcript kept in the profile's storage. Run it after the run has ended.">
+
+```sh
+rm -r "$BOX_HOME/storage/ws/default/agent/config/projects"
+```
+
+<Flag name="-r">Removes the folder with everything in it. Check the path before you press Enter.</Flag>
+
+</Command>
+
+## What to remember
+
+- An argument rule names the tool in its head and reads `context.input.<argument>`: here `context.input.path.account_id`.
+- `has` before the comparison, and `forbid ... unless`, so a missing or wrong account is refused and a broken rule fails closed.
+- `box profile show` cannot check a per-tool rule. The free check can: no per-tool warning means it loaded.
+- A rule decides each request. What a permitted request returns, such as a deployer's email, is not the policy's to see.
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp-policy.md" source="Box docs">Write policy for an MCP server: rules on tool arguments</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/mcp-discovery.md" source="Box docs">How Box discovers tools and loads per-tool rules</ReadMore>
+<ReadMore href="https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/" source="Cloudflare docs">API reference: List Deployments</ReadMore>
+<ReadMore href="/part-4/policy-on-arguments/" source="This workshop">Rules on a tool's arguments</ReadMore>

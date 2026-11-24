@@ -1,0 +1,562 @@
+---
+/**
+ * THE architecture diagram. It grows from stage 1 (no sandbox) to stage 5
+ * (the local exec proxy inside the box). Pieces first shown at `stage` are
+ * marked "new" (stage 1 marks nothing: it is the starting picture). Pieces of
+ * later stages are absent. The layout never moves, so each stage adds pieces
+ * to the same picture.
+ *
+ * `highlight` draws the path one act's requests take, with an X where a
+ * request is refused. Act a has no box, so it is drawn on stage 1 only.
+ * The other acts need at least their own stage: b1 2, b2 3, b3 4, b3-args 4, c 5.
+ *
+ * Usage (MDX):
+ *   <Pieces stage={1} />
+ *   <Pieces stage={3} highlight="b2" />
+ *   <Pieces stage={5} />            (the full picture)
+ */
+import type { ActId } from './workshop-map';
+
+interface Props {
+	stage: 1 | 2 | 3 | 4 | 5;
+	highlight?: ActId;
+	/** Optional caption shown under the diagram. */
+	caption?: string;
+}
+const { stage, highlight, caption } = Astro.props;
+
+if (![1, 2, 3, 4, 5].includes(stage)) throw new Error(`<Pieces>: stage must be 1 to 5, got ${stage}`);
+const ACT_STAGE: Record<ActId, number> = { a: 1, b1: 2, b2: 3, b3: 4, 'b3-args': 4, c: 5 };
+if (highlight && !(highlight in ACT_STAGE)) throw new Error(`<Pieces>: unknown highlight "${highlight}"`);
+if (highlight === 'a' && stage !== 1) throw new Error('<Pieces>: highlight="a" has no box; use stage={1}');
+if (highlight && stage < ACT_STAGE[highlight])
+	throw new Error(`<Pieces>: highlight="${highlight}" needs stage ${ACT_STAGE[highlight]} or later, got ${stage}`);
+
+// ---- Pieces ---------------------------------------------------------------
+type Piece = {
+	id: string;
+	stage: number;
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+	title: string[];
+	sub?: string[] | ((s: number) => string[]);
+	/** Text for the description list. */
+	desc: string;
+	/** Stage at which the piece changes in a way worth marking. */
+	changed?: number;
+	personal?: boolean;
+	off?: (s: number) => boolean;
+};
+
+const PIECES: Piece[] = [
+	{ id: 'keychain', stage: 1, x: 25, y: 15, w: 140, h: 56, title: ['macOS keychain'], sub: ['three secrets'], desc: 'the macOS keychain, which holds the three secrets; the developer reads them into shell variables' },
+	{ id: 'terminal', stage: 1, x: 185, y: 15, w: 150, h: 56, title: ["Developer's", 'terminal'], desc: "the developer's terminal" },
+	{ id: 'claude', stage: 1, x: 45, y: 150, w: 190, h: 60, title: ['Claude Code'], sub: ['the agent'], desc: 'Claude Code, the agent' },
+	{ id: 'fsview', stage: 2, x: 45, y: 250, w: 150, h: 60, title: ['Contained', 'filesystem view'], desc: 'the contained filesystem view: only the paths the profile grants exist for the agent' },
+	{ id: 'execproxy', stage: 5, x: 45, y: 390, w: 190, h: 60, title: ['Local exec proxy'], sub: ['search and execute'], desc: 'the local exec proxy, an MCP server with search and execute tools, in its own sandbox inside the box' },
+	{ id: 'boxcore', stage: 2, x: 285, y: 145, w: 345, h: 40, title: ['box CLI and Box Core'], desc: 'the box CLI and Box Core, which build the box and run its trusted process' },
+	{ id: 'secrets', stage: 2, x: 285, y: 205, w: 165, h: 50, title: ['Stand-in secrets'], sub: ['real values stay here'], desc: 'stand-in secrets: the agent gets placeholders, the real values stay in the trusted process' },
+	{ id: 'gateway', stage: 2, x: 465, y: 205, w: 165, h: 130, title: ['Egress gateway'], sub: ['decides net:connect,', 'http:request, and', 'mcp:call for a', 'remote MCP server'], desc: 'the egress gateway, which every network request from the box goes through' },
+	{ id: 'broker', stage: 3, x: 285, y: 280, w: 165, h: 55, title: ['MCP broker'], sub: ['local MCP servers'], desc: 'the MCP broker, which starts local MCP servers and decides their calls' },
+	{ id: 'catalog', stage: 4, x: 465, y: 355, w: 165, h: 50, title: ['Tool catalog'], sub: ['staged, typed per tool'], desc: "the staged tool catalog: Box types each tool from the server's tools/list before the agent may call it" },
+	{ id: 'policy', stage: 3, x: 285, y: 430, w: 345, h: 60, title: ['Policy engine'], sub: ['Cedar and Dogwood policy files (.dw)'], desc: 'the policy engine, which reads the Cedar and Dogwood policy files' },
+	{ id: 'records', stage: 3, x: 285, y: 515, w: 345, h: 46, title: ['Records'], sub: ["records.jsonl and the run's history"], desc: 'the records: every decision, written where the agent cannot reach' },
+	{ id: 'anthropic', stage: 1, x: 700, y: 150, w: 230, h: 56, title: ['Anthropic API'], sub: ['api.anthropic.com'], desc: 'the Anthropic API' },
+	{
+		id: 'cfmcp',
+		stage: 1,
+		changed: 4,
+		x: 700,
+		y: 230,
+		w: 230,
+		h: 66,
+		title: ['Cloudflare MCP server'],
+		sub: (s) => (s < 4 ? ['code mode: search, execute'] : s === 4 ? ['per-endpoint mode:', '3,053 tools'] : ['per-endpoint mode;', "not on act c's path"]),
+		desc: "Cloudflare's MCP server",
+		off: (s) => s >= 5,
+	},
+	{ id: 'cfapi', stage: 1, x: 700, y: 365, w: 230, h: 56, title: ['Cloudflare API'], sub: ['api.cloudflare.com'], desc: 'the Cloudflare API' },
+	{ id: 'app', stage: 1, x: 700, y: 460, w: 230, h: 96, title: ['Sample app'], sub: ['Worker box-poc-workshop,', 'its D1, KV and', 'Workers Logs'], personal: true, desc: 'the sample app: the Worker box-poc-workshop with its D1 database, KV namespace and Workers Logs; the logs and the database hold attendee names and email addresses' },
+];
+
+type Zone = { id: string; stage: number; x: number; y: number; w: number; h: number; label: string; lx: number; ly: number; kind: 'box' | 'zone' };
+const ZONES: Zone[] = [
+	{ id: 'box', stage: 2, x: 10, y: 100, w: 650, h: 500, label: 'The box', lx: 25, ly: 588, kind: 'box' },
+	{ id: 'agentzone', stage: 2, x: 25, y: 120, w: 220, h: 205, label: "Agent's sandbox", lx: 33, ly: 137, kind: 'zone' },
+	{ id: 'mcpzone', stage: 5, x: 25, y: 360, w: 220, h: 105, label: "MCP server's sandbox", lx: 33, ly: 377, kind: 'zone' },
+	{ id: 'trusted', stage: 2, x: 260, y: 120, w: 390, h: 460, label: 'Trusted process', lx: 270, ly: 137, kind: 'zone' },
+];
+
+// ---- Edges ----------------------------------------------------------------
+type Edge = { id: string; from: number; until?: number; d: string; label?: { x: number; y: number; text: string; anchor?: string } };
+const EDGES: Edge[] = [
+	{ id: 'key_term', from: 1, d: 'M165,43 H185' },
+	{ id: 'term_claude', from: 1, d: 'M210,71 V150' },
+	{ id: 'term_box', from: 2, d: 'M335,43 H450 V145', label: { x: 345, y: 36, text: 'box run' } },
+	{ id: 'direct_anth', from: 1, until: 1, d: 'M235,170 H700' },
+	{ id: 'direct_mcp', from: 1, until: 1, d: 'M235,195 H600 V255 H700', label: { x: 420, y: 188, text: 'real token' } },
+	{ id: 'boxcore_claude', from: 2, d: 'M285,165 H235', label: { x: 262, y: 159, text: 'starts', anchor: 'middle' } },
+	{ id: 'boxcore_secrets', from: 2, d: 'M367,185 V205' },
+	{ id: 'secrets_gateway', from: 2, d: 'M450,230 H465' },
+	{ id: 'claude_gateway', from: 2, d: 'M235,200 H253 V268 H465' },
+	{ id: 'gateway_anth', from: 2, d: 'M630,215 H665 V178 H700' },
+	{ id: 'gateway_mcp', from: 2, d: 'M630,263 H700' },
+	{ id: 'gateway_cfapi', from: 5, d: 'M630,300 H675 V393 H700' },
+	{ id: 'gateway_policy', from: 3, d: 'M630,325 H642 V460 H630' },
+	{ id: 'cfmcp_cfapi', from: 1, d: 'M815,296 V365' },
+	{ id: 'cfapi_app', from: 1, d: 'M815,421 V460' },
+	{ id: 'gateway_catalog', from: 4, d: 'M547,335 V355' },
+	{ id: 'catalog_policy', from: 4, d: 'M547,405 V430' },
+	{ id: 'broker_policy', from: 3, d: 'M367,335 V430' },
+	{ id: 'policy_records', from: 3, d: 'M457,490 V515' },
+	{ id: 'claude_broker', from: 5, d: 'M220,210 V307 H285', label: { x: 226, y: 300, text: 'stdio' } },
+	{ id: 'broker_proxy', from: 5, d: 'M285,325 H270 V405 H235' },
+	{ id: 'proxy_gateway', from: 5, d: 'M235,440 H278 V418 H457 V320 H465' },
+];
+
+// ---- Acts -----------------------------------------------------------------
+type Act = {
+	name: string;
+	edges: string[];
+	refusals: { x: number; y: number }[];
+	refusalLabel?: string;
+	outcome: string;
+	steps: string[];
+};
+const BOXED = ['key_term', 'term_box', 'term_claude', 'boxcore_claude', 'boxcore_secrets', 'secrets_gateway', 'claude_gateway', 'gateway_anth'];
+const AT_VENDOR = { x: 665, y: 263 };
+const ACTS: Record<ActId, Act> = {
+	a: {
+		name: "Act a: the vendor's server, no box",
+		edges: ['key_term', 'term_claude', 'direct_anth', 'direct_mcp', 'cfmcp_cfapi', 'cfapi_app'],
+		refusals: [],
+		outcome: 'The logs come back to the agent. Nothing between the agent and Cloudflare decides anything.',
+		steps: [
+			'The developer reads the model key and the MCP token from the keychain into shell variables and starts Claude Code in the terminal.',
+			'Claude Code sends each model call straight to the Anthropic API.',
+			"Claude Code calls the Cloudflare MCP server's execute tool, holding the real token.",
+			"The server runs the agent's script against the Cloudflare API, which reads the sample app's logs.",
+		],
+	},
+	b1: {
+		name: 'Act b1: in a box, execute permitted',
+		edges: [...BOXED, 'gateway_mcp', 'cfmcp_cfapi', 'cfapi_app', 'gateway_policy', 'policy_records'],
+		refusals: [],
+		outcome: 'The logs still come back. Box saw one permitted tool call, not what the script did.',
+		steps: [
+			"The developer reads the secrets into shell variables and runs box run. Box starts Claude Code in the agent's sandbox and keeps the real secrets in the trusted process.",
+			'Every request from Claude Code goes to the egress gateway. The agent holds only stand-in values; the gateway swaps in the real ones.',
+			'The gateway forwards the model calls to the Anthropic API.',
+			'For the Cloudflare MCP server the gateway asks the policy engine to decide mcp:call for execute. The policy permits it, and the decision is recorded.',
+			"The server runs the agent's script against the Cloudflare API, which reads the sample app's logs.",
+		],
+	},
+	b2: {
+		name: 'Act b2: execute forbidden by name',
+		edges: [...BOXED, 'gateway_mcp', 'gateway_policy', 'policy_records'],
+		refusals: [AT_VENDOR],
+		refusalLabel: 'execute refused',
+		outcome: 'A forbid rule refuses execute at the gateway. Both tasks are refused: the allowed one too.',
+		steps: [
+			"Box starts Claude Code in the agent's sandbox, as in act b1.",
+			'The gateway forwards the model calls to the Anthropic API.',
+			'For the Cloudflare MCP server the gateway asks the policy engine to decide mcp:call for execute.',
+			'A forbid rule on the tool name matches. The request never reaches the server, and the refusal is recorded.',
+		],
+	},
+	b3: {
+		name: 'Act b3: an allow-list of tool names',
+		edges: [...BOXED, 'gateway_mcp', 'cfmcp_cfapi', 'cfapi_app', 'gateway_catalog', 'catalog_policy', 'gateway_policy', 'policy_records'],
+		refusals: [AT_VENDOR],
+		refusalLabel: 'logs tool refused',
+		outcome: 'A tool on the allow-list is permitted and reaches the Cloudflare API. The logs tool, o11y_telemetry_query, is not on the list and is refused.',
+		steps: [
+			"Cloudflare's MCP server runs in per-endpoint mode: one tool per API operation.",
+			"The gateway stages the server's tools/list as a catalog, and the policy engine gets a typed schema for each tool before the agent may call it.",
+			'Each tool call is decided by its tool name. A tool on the allow-list is permitted and reaches the Cloudflare API.',
+			'The logs tool is not on the allow-list. Its call is refused at the gateway and recorded.',
+		],
+	},
+	'b3-args': {
+		name: 'Act b3-args: one tool on one account',
+		edges: [...BOXED, 'gateway_mcp', 'cfmcp_cfapi', 'cfapi_app', 'gateway_catalog', 'catalog_policy', 'gateway_policy', 'policy_records'],
+		refusals: [AT_VENDOR],
+		refusalLabel: 'other account refused',
+		outcome: "workers_deployments_list is permitted on the sample app's account and refused on any other account.",
+		steps: [
+			'As in act b3, the catalog gives the policy engine a typed schema for each tool.',
+			"A rule reads the tool call's account_id argument.",
+			"The call with the sample app's account is permitted and reaches the Cloudflare API.",
+			'The same call with another account is refused at the gateway and recorded.',
+		],
+	},
+	c: {
+		name: 'Act c: code mode inside the box',
+		edges: [...BOXED, 'claude_broker', 'broker_proxy', 'broker_policy', 'proxy_gateway', 'gateway_cfapi', 'cfapi_app', 'gateway_policy', 'policy_records'],
+		refusals: [{ x: 675, y: 345 }],
+		refusalLabel: 'logs request refused',
+		outcome: "The allowed task is done in one execute. The logs request is refused at the gateway. The vendor's server is not on the path.",
+		steps: [
+			"Claude Code runs node with the proxy's path. The node on the agent's PATH is Box's alias, which hands the start to the MCP broker.",
+			'The broker asks the policy engine to permit starting the local exec proxy, and starts it in its own sandbox.',
+			'Each execute is an mcp:call the broker decides. The script runs inside the box.',
+			"The script's API requests leave the proxy through the egress gateway, which decides each one by method, host and path.",
+			'GET requests for the Workers list and the deployments are permitted and reach the Cloudflare API.',
+			'POST /workers/observability/telemetry/query, the logs, is refused at the gateway and recorded.',
+		],
+	},
+};
+
+// ---- Derive what to draw ----------------------------------------------------
+const act = highlight ? ACTS[highlight] : undefined;
+const pieces = PIECES.filter((p) => p.stage <= stage);
+const zones = ZONES.filter((z) => z.stage <= stage);
+const edges = EDGES.filter((e) => e.from <= stage && (e.until === undefined || stage <= e.until));
+const onPath = new Set(act ? act.edges : []);
+const isNew = (s: number) => stage > 1 && s === stage;
+const subOf = (p: Piece) => (typeof p.sub === 'function' ? p.sub(stage) : (p.sub ?? []));
+const uid = `pc${stage}${highlight ?? ''}-${Math.random().toString(36).slice(2, 8)}`.replace(/[^a-z0-9-]/gi, '');
+const newPieces = pieces.filter((p) => isNew(p.stage) || p.changed === stage);
+const actWord = act ? act.name.split(':')[0].toLowerCase() : '';
+const titleText = `Architecture, stage ${stage} of 5${act ? `, with the path of ${actWord}` : ''}`;
+
+// Legend items, laid out in the free top-right band.
+const legend: { kind: 'personal' | 'new' | 'path' | 'refuse'; text: string }[] = [
+	{ kind: 'personal', text: 'holds names and email addresses' },
+	...(stage > 1 ? [{ kind: 'new' as const, text: 'new at this stage' }] : []),
+	...(act ? [{ kind: 'path' as const, text: `path of ${actWord}` }] : []),
+	...(act?.refusalLabel ? [{ kind: 'refuse' as const, text: act.refusalLabel }] : []),
+];
+const legendPos = [
+	[470, 30],
+	[730, 30],
+	[470, 62],
+	[730, 62],
+];
+---
+
+<figure class="aib-pieces aib-diagram">
+	<svg viewBox="0 0 940 612" role="img" aria-labelledby={`${uid}-title ${uid}-desc`} preserveAspectRatio="xMidYMid meet">
+		<title id={`${uid}-title`}>{titleText}</title>
+		<desc id={`${uid}-desc`}>
+			{`Pieces: ${pieces.map((p) => p.title.join(' ')).join(', ')}.`}
+			{newPieces.length > 0 && ` New at this stage: ${newPieces.map((p) => p.title.join(' ')).join(', ')}.`}
+			{act && ` ${act.outcome}`}
+			{' A full text description follows the diagram.'}
+		</desc>
+		<defs>
+			<marker id={`${uid}-arr`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+				<path d="M0,0 L10,5 L0,10 z" class="aib-pc-arrow" />
+			</marker>
+			<marker id={`${uid}-arr-new`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+				<path d="M0,0 L10,5 L0,10 z" class="aib-pc-arrow-hi" />
+			</marker>
+			<marker id={`${uid}-arr-hi`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="13" markerHeight="13" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+				<path d="M0,0 L10,5 L0,10 z" class="aib-pc-arrow-hi" />
+			</marker>
+		</defs>
+
+		<g class="aib-pc-zones">
+			{
+				zones.map((z) => (
+					<g class:list={['aib-pc-zone', `aib-pc-${z.kind}`, { 'is-new': isNew(z.stage) }]}>
+						<rect x={z.x} y={z.y} width={z.w} height={z.h} rx="6" />
+						<text x={z.lx} y={z.ly} class="aib-pc-zone-label">
+							{z.label}
+						</text>
+					</g>
+				))
+			}
+		</g>
+
+		<g class:list={['aib-pc-edges', { 'has-highlight': !!act }]}>
+			{
+				[...edges.filter((e) => !onPath.has(e.id)), ...edges.filter((e) => onPath.has(e.id))].map((e) => {
+					const path = onPath.has(e.id);
+					const fresh = !path && isNew(e.from);
+					return (
+						<g class:list={['aib-pc-edge', { 'is-path': path, 'is-new': fresh }]}>
+							<path d={e.d} marker-end={`url(#${uid}-${path ? 'arr-hi' : fresh ? 'arr-new' : 'arr'})`} />
+							{e.label && (
+								<text x={e.label.x} y={e.label.y} text-anchor={e.label.anchor ?? 'start'} class="aib-pc-edge-label">
+									{e.label.text}
+								</text>
+							)}
+						</g>
+					);
+				})
+			}
+		</g>
+
+		<g class="aib-pc-nodes">
+			{
+				pieces.map((p) => {
+					const sub = subOf(p);
+					const lines = p.title.length + sub.length;
+					const lineH = 18;
+					const firstY = p.y + p.h / 2 - ((lines - 1) * lineH) / 2 + 5;
+					const fresh = isNew(p.stage);
+					const changed = p.changed === stage;
+					const off = !!p.off?.(stage) && (highlight === undefined || highlight === 'c');
+					return (
+						<g class:list={['aib-pc-node', { 'is-new': fresh, 'is-changed': changed, 'is-off': off }]}>
+							<rect x={p.x} y={p.y} width={p.w} height={p.h} rx="4" />
+							{p.title.map((t, i) => (
+								<text x={p.x + p.w / 2} y={firstY + i * lineH} text-anchor="middle" class="aib-pc-title">
+									{t}
+								</text>
+							))}
+							{sub.map((t, i) => (
+								<text x={p.x + p.w / 2} y={firstY + (p.title.length + i) * lineH} text-anchor="middle" class="aib-pc-sub">
+									{t}
+								</text>
+							))}
+							{(fresh || changed) && (
+								<g class="aib-pc-tag">
+									<rect x={p.x + p.w - (fresh ? 40 : 64)} y={p.y - 15} width={fresh ? 40 : 64} height="16" rx="8" />
+									<text x={p.x + p.w - (fresh ? 20 : 32)} y={p.y - 3.5} text-anchor="middle">
+										{fresh ? 'new' : 'changed'}
+									</text>
+								</g>
+							)}
+							{p.personal && <circle cx={p.x + 15} cy={p.y + 15} r="6" class="aib-pc-personal" />}
+						</g>
+					);
+				})
+			}
+		</g>
+
+		{
+			act &&
+				act.refusals.map((r) => (
+					<g class="aib-pc-refusal">
+						<circle cx={r.x} cy={r.y} r="11" />
+						<path d={`M${r.x - 5.5},${r.y - 5.5} L${r.x + 5.5},${r.y + 5.5} M${r.x + 5.5},${r.y - 5.5} L${r.x - 5.5},${r.y + 5.5}`} />
+					</g>
+				))
+		}
+
+		<g class="aib-pc-legend">
+			{
+				legend.map((item, i) => {
+					const [x, y] = legendPos[i];
+					return (
+						<g transform={`translate(${x} ${y})`}>
+							{item.kind === 'personal' && <circle cx="12" cy="0" r="6" class="aib-pc-personal" />}
+							{item.kind === 'new' && <rect x="0" y="-10" width="26" height="20" rx="10" class="aib-pc-legend-new" />}
+							{item.kind === 'path' && <line x1="0" x2="26" y1="0" y2="0" class="aib-pc-legend-path" />}
+							{item.kind === 'refuse' && (
+								<g class="aib-pc-refusal">
+									<circle cx="13" cy="0" r="10" />
+									<path d="M8,-5 L18,5 M18,-5 L8,5" />
+								</g>
+							)}
+							<text x="36" y="5">
+								{item.text}
+							</text>
+						</g>
+					);
+				})
+			}
+		</g>
+	</svg>
+
+	<figcaption>
+		{caption && <p class="aib-pieces-caption">{caption}</p>}
+		{
+			act && (
+				<p class="aib-pieces-outcome">
+					<strong>{act.name}.</strong> {act.outcome}
+				</p>
+			)
+		}
+		<details class="aib-pieces-text">
+			<summary>Text description of the diagram</summary>
+			<p>Stage {stage} of 5.{stage === 1 && ' No sandbox yet.'}</p>
+			<p>Pieces in the picture:</p>
+			<ul>
+				{
+					pieces.map((p) => (
+						<li>
+							{p.desc}
+							{isNew(p.stage) && ' (new at this stage)'}
+							{p.changed === stage && ' (changed at this stage: it now runs in per-endpoint mode)'}
+							{p.off?.(stage) && " (not on act c's path)"}
+						</li>
+					))
+				}
+				{zones.length > 0 && <li>Boundaries: {zones.map((z) => z.label.toLowerCase()).join(', ')}.</li>}
+			</ul>
+			{
+				act && (
+					<>
+						<p>The path of {actWord}:</p>
+						<ol>
+							{act.steps.map((s) => (
+								<li>{s}</li>
+							))}
+						</ol>
+						<p>Outcome: {act.outcome}</p>
+					</>
+				)
+			}
+		</details>
+	</figcaption>
+</figure>
+
+<style>
+	.aib-pieces {
+		margin: 1.5rem 0 0;
+	}
+	.aib-pieces svg {
+		display: block;
+		width: 100%;
+		height: auto;
+		/* Never taller than the window, so the whole diagram stays in view. */
+		max-height: calc(100vh - var(--sl-nav-height) - 2rem);
+	}
+	/* Pieces */
+	.aib-pc-node rect {
+		fill: var(--aib-node-bg);
+		stroke: var(--aib-node-line);
+		stroke-width: 1;
+	}
+	.aib-pc-node.is-new > rect,
+	.aib-pc-node.is-changed > rect {
+		stroke: var(--sl-color-accent);
+		stroke-width: 2.5;
+	}
+	.aib-pc-node.is-off > rect {
+		stroke-dasharray: 6 5;
+	}
+	.aib-pc-node.is-off text {
+		opacity: 0.7;
+	}
+	.aib-pc-title {
+		fill: var(--sl-color-white);
+		font-size: 16px;
+		font-weight: 700;
+	}
+	.aib-pc-sub {
+		fill: var(--sl-color-gray-2);
+		font-size: 13.5px;
+	}
+	.aib-pc-tag rect {
+		fill: var(--sl-color-accent);
+		stroke: none;
+	}
+	.aib-pc-tag text {
+		fill: var(--sl-color-black);
+		font-size: 10.5px;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+	}
+	:global([data-theme='light']) .aib-pc-tag text {
+		fill: #fff;
+	}
+	.aib-pc-personal {
+		fill: none;
+		stroke: var(--sl-color-white);
+		stroke-width: 2.5;
+	}
+	/* Zones */
+	.aib-pc-zone rect {
+		fill: none;
+		stroke: var(--sl-color-gray-3);
+		stroke-width: 1.25;
+		stroke-dasharray: 6 5;
+	}
+	.aib-pc-box > rect {
+		stroke: var(--sl-color-gray-3);
+		stroke-width: 2;
+		stroke-dasharray: none;
+	}
+	.aib-pc-zone.is-new > rect {
+		stroke: var(--sl-color-accent);
+	}
+	.aib-pc-zone-label {
+		fill: var(--sl-color-gray-3);
+		font-size: 12.5px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+	.aib-pc-box .aib-pc-zone-label {
+		fill: var(--sl-color-gray-2);
+		font-size: 14px;
+	}
+	/* Edges */
+	.aib-pc-edge path {
+		fill: none;
+		stroke: var(--sl-color-gray-3);
+		stroke-width: 1.5;
+	}
+	.aib-pc-edge.is-new path {
+		stroke: var(--sl-color-accent);
+		stroke-width: 2;
+		stroke-dasharray: 5 3;
+	}
+	.has-highlight .aib-pc-edge:not(.is-path) {
+		opacity: 0.35;
+	}
+	.aib-pc-edge.is-path path {
+		stroke: var(--sl-color-accent);
+		stroke-width: 4;
+	}
+	.aib-pc-arrow {
+		fill: var(--sl-color-gray-3);
+	}
+	.aib-pc-arrow-hi {
+		fill: var(--sl-color-accent);
+	}
+	.aib-pc-edge-label {
+		fill: var(--sl-color-gray-2);
+		font-size: 13px;
+		paint-order: stroke;
+		stroke: var(--sl-color-bg);
+		stroke-width: 4px;
+		stroke-linejoin: round;
+	}
+	/* Refusal */
+	.aib-pc-refusal circle {
+		fill: var(--sl-color-bg);
+		stroke: var(--aib-refuse);
+		stroke-width: 3;
+	}
+	.aib-pc-refusal path {
+		stroke: var(--aib-refuse);
+		stroke-width: 3;
+		stroke-linecap: round;
+	}
+	/* Legend */
+	.aib-pc-legend text {
+		fill: var(--sl-color-gray-2);
+		font-size: 13.5px;
+	}
+	.aib-pc-legend-new {
+		fill: var(--sl-color-accent);
+	}
+	.aib-pc-legend-path {
+		stroke: var(--sl-color-accent);
+		stroke-width: 4;
+	}
+	/* Caption and text alternative */
+	.aib-pieces figcaption {
+		margin-top: 0.5rem;
+	}
+	.aib-pieces-caption,
+	.aib-pieces-outcome {
+		margin: 0.25rem 0 0;
+	}
+	.aib-pieces-text {
+		margin-top: 0.5rem;
+		font-size: var(--sl-text-sm);
+	}
+	.aib-pieces-text summary {
+		cursor: pointer;
+		color: var(--sl-color-gray-2);
+	}
+</style>

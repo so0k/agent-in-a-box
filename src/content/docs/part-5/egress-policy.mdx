@@ -1,0 +1,493 @@
+---
+title: "Network rules for each API request"
+description: "Deciding each API request by method, host and path at the egress gateway."
+sidebar:
+  label: "Network rules"
+  order: 2
+  badge:
+    text: "Hands-on"
+    class: "aib-badge aib-badge-handson"
+---
+
+import { Aside, FileTree } from '@astrojs/starlight/components';
+import { PartProgress, Pieces, CatchUp, Iteration, Command, Flag, Why, ReadMore, Expect, Seat } from '~/components';
+
+<PartProgress current="part-5/egress-policy" />
+
+After this page you will know how a Box rule names one HTTP request, by its method, host and path, and you will have written the rules that let the agent read the Worker list and the deployments of the workshop app while refusing its logs. The story needs this now because the local exec proxy sends real API requests through Box's egress gateway, and so far the gateway refuses every one of them.
+
+<CatchUp>
+
+The files as they stand at the end of [the local exec proxy](/part-5/local-execute/). The three `.dw` files of Parts 3 and 4 may still be in the profile folder; no profile lists them, so they do nothing.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml"
+packs = ["@box/base"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+DISABLE_AUTOUPDATER = "1"
+
+[egress.anthropic]
+destinations = ["api.anthropic.com"]
+secret.ref = "env://ANTHROPIC_API_KEY"
+secret.header = "x-api-key"
+secret.phantom_prefix = "sk-ant-"
+
+[mcp.exec-proxy]
+type = "stdio"
+command = ["${{ home }}/.local/share/mise/installs/node/22.23.4/bin/node", "${{ home }}/box-exec-proxy/proxy/exec-proxy"]
+filesystem.read = [
+  "${{ home }}/.local/share/mise/installs/node/22.23.4",
+  "${{ home }}/box-exec-proxy/proxy",
+  "${{ home }}/box-exec-proxy/spec",
+]
+env = { CLOUDFLARE_ACCOUNT_ID = "0123456789abcdef0123456789abcdef" }
+```
+
+```json title="$HOME/leaderboard-ops/exec-proxy.json"
+{
+  "mcpServers": {
+    "exec-proxy": {
+      "command": "node",
+      "args": ["${HOME}/box-exec-proxy/proxy/exec-proxy"]
+    }
+  }
+}
+```
+
+</CatchUp>
+
+<Pieces stage={5} />
+
+The picture has not changed since the last page. What changes here is what the egress gateway decides: until now it decided the traffic of Claude Code and of the vendor's MCP server; from this page on it also decides every request the exec proxy sends to `api.cloudflare.com`.
+
+## From a tool call to an API request
+
+In Parts 3 and 4 the security engineer's rules decided a tool call. Here they decide the API request itself. Both are Cedar rules in a `.dw` file; what differs is the action they name and the fields they can read.
+
+| | Parts 3 and 4: a tool call | Part 5: an API request |
+|---|---|---|
+| Action | `Box::Action::"mcp:call"`, or a tool's own action such as `cloudflare::Action::"execute"` | `Box::Action::"net:connect"` and `Box::Action::"http:request"` |
+| Raised by | the gateway, for a remote MCP server | the gateway, for any connection out of the box |
+| Fields the rule reads | `server`, `method`, `tool`, and the tool's typed arguments | `host`, `port`, `method`, `path`, `body_bytes`, `intercepted` |
+| What it knows about the effect | what the tool's name and arguments promise | the exact request that would reach Cloudflare |
+
+The difference matters for the story. In act b2 a rule on `execute` could only refuse the whole tool, because the script was out of sight. In act b3 a rule on a tool name relied on the model picking the tool on the list. A rule on the request does not care which tool or which script sent it.
+
+## How a rule names a request
+
+The egress gateway decides each request twice (Box docs, `policy/actions.md`):
+
+- **`net:connect`**, once per connection, before TLS. It knows the `host` and the `port`. A refusal here closes the connection before anything is sent.
+- **`http:request`**, once per request inside the connection, after the gateway has decrypted it. It knows:
+  - `method`: `GET`, `POST` and so on.
+  - `path`: the URL path in canonical form, without the query string. The gateway decodes harmless percent escapes and removes `.` and `..` segments, but it keeps `//` and `%2F` as they are.
+  - `body_bytes`: the length of the body. The body itself is not visible to policy.
+  - `intercepted`: `true` when the gateway decrypted the TLS exchange, so method and path are what was really sent.
+
+A route in the profile, an `[egress.<name>]` table, writes both permits for its hosts: one for `net:connect` and one for `http:request`, for every method and every path. That is what you add in iteration 2, and why iteration 3 then narrows it with a `forbid`.
+
+## Write the rules, one at a time
+
+Each run on this page is a real run, with the allowed task only, so you see the requests the agent's script really sends. It is capped at USD 0.25; the measured run of iteration 1 cost USD 0.0103.
+
+<Iteration n={1} title="Before the route">
+
+**What we change.** Nothing. The profile is the one in the catch-up block. This run shows what the gateway does with an API request it knows nothing about.
+
+**The run.**
+
+<Command what="Runs the allowed task headless in the box, with the exec proxy as the only MCP server, and writes the stream to a file.">
+
+```sh
+box run ws --no-banner -- --bare --strict-mcp-config --mcp-config exec-proxy.json --tools "" --allowedTools mcp__exec-proxy --model claude-sonnet-5-5 --max-turns 10 --max-budget-usd 0.25 -p "List the Workers on Cloudflare account 0123456789abcdef0123456789abcdef and summarise the current deployment of the Worker box-poc-workshop." --output-format stream-json --verbose < /dev/null > act-c-noroute.jsonl
+```
+
+<Flag name="box run ws --no-banner --">The profile `ws`, no activity line, and the end of Box's options.</Flag>
+<Flag name='--bare --strict-mcp-config --mcp-config exec-proxy.json --tools ""'>As in the free check: none of your own Claude Code set-up, only the exec proxy, no built-in tools.</Flag>
+<Flag name="--allowedTools mcp__exec-proxy">Pre-approves `search` and `execute`, so the headless run never waits for a permission answer.</Flag>
+<Flag name="--model claude-sonnet-5-5">The same model as every act.</Flag>
+<Flag name="--max-turns 10">A hard stop after 10 model turns.</Flag>
+<Flag name="--max-budget-usd 0.25">Claude Code stops when the run has cost USD 0.25. It works only with `-p`.</Flag>
+<Flag name='-p "List the Workers ..."'>The developer's allowed task, word for word as in every act.</Flag>
+<Flag name="--output-format stream-json --verbose">One JSON event per line, so turns, tokens and the tool results can be read afterwards.</Flag>
+<Flag name="< /dev/null > act-c-noroute.jsonl">An empty input, and the stream in a file you can open with `less`.</Flag>
+
+</Command>
+
+Then read Box's decisions. The ID is in the line `box: policy history: box runs history b-...` that `box run` printed; `box runs list ws` also lists the runs of the profile, newest first.
+
+<Command what="Prints every decision Box made in one run.">
+
+```sh
+box runs history b-0123456789abcdef
+```
+
+<Flag name="b-0123456789abcdef">An example. Use the ID of your own run.</Flag>
+
+</Command>
+
+**What we see.** The proxy starts and runs the script, and both of the script's connections to `api.cloudflare.com` are refused before TLS.
+
+<Expect variant="refuse">
+
+```text
+permit  shell:spawn  ~/.local/share/mise/installs/node/22.23.4/bin/node  mcp_exec-proxy_spawn
+permit  mcp:call     exec-proxy/tools/list                               mcp_exec-proxy_call
+permit  mcp:call     exec-proxy/execute                                  mcp_exec-proxy_call
+deny    net:connect  api.cloudflare.com:443                              <default-deny>  no permit matched
+deny    net:connect  api.cloudflare.com:443                              <default-deny>  no permit matched
+```
+
+The script's error, as the model received it in the tool result:
+
+```text
+Error: Refused by Box egress policy (rule: default-deny) when connecting to the host (net:connect): GET /accounts/0123456789abcdef0123456789abcdef/workers/scripts was not sent. No permit policy matched this request.
+```
+
+The run took 2 turns and cost USD 0.0103.
+
+</Expect>
+
+For the first time in this workshop, Box's records hold a row for a request to the Cloudflare API itself, not only a tool call. The refusal is `<default-deny>`: no rule permits the host, and Box refuses whatever no rule permits.
+
+<Why>
+
+Running before the route shows the starting point the security engineer wants: everything closed, and each refusal visible. It also shows that the proxy really sends its requests through the gateway: without a permit, nothing reached Cloudflare.
+
+<Fragment slot="alternative">
+
+Skip this run and go to iteration 2. You lose nothing in the files, only the evidence that the gateway is on the path.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+<Iteration n={2} title="The route">
+
+**What we add.** A route for the Cloudflare API, with its credential.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={34-36}
+packs = ["@box/base"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+DISABLE_AUTOUPDATER = "1"
+
+[egress.anthropic]
+destinations = ["api.anthropic.com"]
+secret.ref = "env://ANTHROPIC_API_KEY"
+secret.header = "x-api-key"
+secret.phantom_prefix = "sk-ant-"
+
+[mcp.exec-proxy]
+type = "stdio"
+command = ["${{ home }}/.local/share/mise/installs/node/22.23.4/bin/node", "${{ home }}/box-exec-proxy/proxy/exec-proxy"]
+filesystem.read = [
+  "${{ home }}/.local/share/mise/installs/node/22.23.4",
+  "${{ home }}/box-exec-proxy/proxy",
+  "${{ home }}/box-exec-proxy/spec",
+]
+env = { CLOUDFLARE_ACCOUNT_ID = "0123456789abcdef0123456789abcdef" }
+
+[egress.cloudflare-api]
+destinations = ["api.cloudflare.com"]
+secret.ref = "env://CLOUDFLARE_API_TOKEN"
+```
+
+- `[egress.cloudflare-api]`: a route named `cloudflare-api`. The name appears in the generated rules.
+- `destinations`: the one host, without `https://` and without a path. Port 443 by default.
+- `secret.ref = "env://CLOUDFLARE_API_TOKEN"`: the real token comes from that variable in the shell where you run `box run`, the one you read from the keychain on the set-up page. Inside the box, `CLOUDFLARE_API_TOKEN` holds a stand-in, also in the exec proxy's environment. The header is `Authorization` with the prefix `Bearer `, the defaults, which is what the Cloudflare API expects.
+
+**The run.** Look at the rules Box now generates. No agent runs.
+
+<Command what="Prints the profile as Box resolves it, with the generated box.toml and policy a run would get.">
+
+```sh
+box profile show ws --full
+```
+
+<Flag name="ws">The profile's name: the folder `$HOME/box-ws/profiles/ws/`.</Flag>
+<Flag name="--full">Also prints the generated `box.toml` and `policy.dw`. Without it, `box profile show` does not list routes or MCP servers.</Flag>
+
+</Command>
+
+**What we see.** Two new generated rules for the route.
+
+<Expect>
+
+In the printed `policy.dw`, look for the rules with `@id("route_cloudflare-api_connect")` and `@id("route_cloudflare-api_request")`. Between them they permit a connection to `api.cloudflare.com` and every request on it: every method, every path.
+
+</Expect>
+
+<Aside type="caution" title="Do not run the logs task now">
+
+With only the route, the logs task would run and return log lines of the workshop app, which can hold attendee names and email addresses. This step was not run with the logs task while the workshop was written, on purpose. The next iteration closes the route down before any further run.
+
+</Aside>
+
+<Why>
+
+A route is how Box attaches a credential: the gateway swaps the stand-in for the real token, on this host only. Without a route, a permit alone would let the request out with the stand-in, and Cloudflare would refuse it.
+
+<Fragment slot="alternative">
+
+Leave the route out and write a `permit` for each read yourself. Then Box adds no credential, so the requests carry only the stand-in and fail at Cloudflare. A route with more hosts, or a `*.cloudflare.com` wildcard, would open more than the task needs.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+<Iteration n={3} title="Only two reads">
+
+**What we add.** A policy file with one rule, and the line in the profile that names it. Write the file first: a profile that names a missing file does not run.
+
+The new file sits next to the profile, beside the policy files of Parts 3 and 4 if you kept them:
+
+<FileTree>
+
+- box-ws/
+  - profiles/
+    - ws/
+      - profile.toml you edit this
+      - **api-read-only.dw** the rules on each API request
+      - no-remote-execute.dw no longer listed
+      - operate-tools.dw no longer listed
+      - args.dw no longer listed
+  - storage/ kept between runs
+  - r/ one folder per run
+- leaderboard-ops/ the workspace
+  - cloudflare-code-mode.json
+  - cloudflare-per-endpoint.json
+  - exec-proxy.json the exec proxy, for Claude Code
+
+</FileTree>
+
+```text title="$HOME/box-ws/profiles/ws/api-read-only.dw"
+// The security engineer's constraints on the workshop app, written for the Cloudflare API
+// itself: every request the agent's scripts send to api.cloudflare.com is decided here, by
+// method and path. The agent may read the Worker list and the deployments of box-poc-workshop.
+// Everything else is refused: the logs, the attendee data in D1, deploys and deletes.
+
+@id("operate_requests_only")
+@description("Only two reads are allowed: the Worker list of the workshop account, and the deployments of box-poc-workshop. Every other Cloudflare API request is refused.")
+forbid (principal, action == Box::Action::"http:request", resource)
+when { context.input.host == "api.cloudflare.com" }
+unless {
+  context.input.intercepted && context.input.method == "GET" && (
+    context.input.path == "/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts" ||
+    context.input.path == "/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts/box-poc-workshop/deployments"
+  )
+};
+```
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={2}
+packs = ["@box/base"]
+policies = ["api-read-only.dw"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+DISABLE_AUTOUPDATER = "1"
+
+[egress.anthropic]
+destinations = ["api.anthropic.com"]
+secret.ref = "env://ANTHROPIC_API_KEY"
+secret.header = "x-api-key"
+secret.phantom_prefix = "sk-ant-"
+
+[mcp.exec-proxy]
+type = "stdio"
+command = ["${{ home }}/.local/share/mise/installs/node/22.23.4/bin/node", "${{ home }}/box-exec-proxy/proxy/exec-proxy"]
+filesystem.read = [
+  "${{ home }}/.local/share/mise/installs/node/22.23.4",
+  "${{ home }}/box-exec-proxy/proxy",
+  "${{ home }}/box-exec-proxy/spec",
+]
+env = { CLOUDFLARE_ACCOUNT_ID = "0123456789abcdef0123456789abcdef" }
+
+[egress.cloudflare-api]
+destinations = ["api.cloudflare.com"]
+secret.ref = "env://CLOUDFLARE_API_TOKEN"
+```
+
+The rule, element by element:
+
+- `@id("operate_requests_only")`: the rule's name. It appears in `box runs history` and in the refusal the agent reads.
+- `@description(...)`: the reason, in words. The agent receives it with a refusal, so write it for the agent and for the person reading the records.
+- `forbid (principal, action == Box::Action::"http:request", resource)`: the head. This rule can only refuse, and only HTTP requests.
+- `when { context.input.host == "api.cloudflare.com" }`: it applies to this one host.
+- `unless { ... }`: the exceptions. The rule does not refuse a request for which this condition is true.
+- `context.input.intercepted`: the gateway decrypted the request, so the method and the path are the ones really sent.
+- `context.input.method == "GET"`: reads only.
+- The two `context.input.path == "..."` lines: the two exact paths the task needs, the Worker list of the account and the deployments of `box-poc-workshop`. The paths start with `/client/v4`, because policy sees the full URL path. The proxy's own report and error messages show the path without that prefix, relative to the API's base URL.
+
+**The run.** Box checks the profile and its policy file without starting an agent.
+
+<Command what="Prints the profile as Box resolves it, and refuses if a policy file is missing or a rule does not load.">
+
+```sh
+box profile show ws
+```
+
+<Flag name="ws">The profile's name. Without `--full`, the command prints packs, storage, project and options; it still reads and checks every policy file the profile names.</Flag>
+
+</Command>
+
+**What we see.** The profile is printed with no error. This state, with only the first rule, was not run on its own while the workshop was written; the same rule loads in the next iteration's file, which was checked.
+
+<Why title="Why a forbid with exceptions, not a permit">
+
+The route already permits every request on the host, with its generated rule `route_cloudflare-api_request`. In Box, a permit can never narrow another permit, and any matching `forbid` wins. So the only way to say "only these two" is a `forbid` for everything on the host, `unless` the request is one of the two. Exact paths with `==` are chosen over patterns: a different spelling of a path, with `//` or `%2F` or an extra segment, is simply not equal, and so it is refused.
+
+<Fragment slot="alternative">
+
+The generated policy used in the measured runs uses `like` patterns for six reads plus scratch deploys with budgets. That policy is in the author's notes and is not published. The kit that generates such policies is published in box-exec-proxy, in `kit/` and `tools/policy-gen/`. Its smaller generated example, [`kit/scenarios/workers-logs/policy.dw`](https://github.com/so0k/box-exec-proxy/blob/main/kit/scenarios/workers-logs/policy.dw), allows four Worker script reads, refuses ambiguous path spellings and request bodies over 16384 bytes, and names the reason for refusing Workers logs. A pattern needs extra forbids for the ambiguous spellings and for the number of path segments, which Box's docs describe in "Forbid one URL path on a host". The workshop's constraints are read-only and the task needs two reads, so two exact paths are enough. Each further read the story allows, such as a Worker's settings or its versions, is one more `path ==` line.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+<Iteration n={4} title="Give the logs refusal its reason">
+
+**What we add.** A second rule, at the end of the same file.
+
+```text title="$HOME/box-ws/profiles/ws/api-read-only.dw" ins={17-20}
+// The security engineer's constraints on the workshop app, written for the Cloudflare API
+// itself: every request the agent's scripts send to api.cloudflare.com is decided here, by
+// method and path. The agent may read the Worker list and the deployments of box-poc-workshop.
+// Everything else is refused: the logs, the attendee data in D1, deploys and deletes.
+
+@id("operate_requests_only")
+@description("Only two reads are allowed: the Worker list of the workshop account, and the deployments of box-poc-workshop. Every other Cloudflare API request is refused.")
+forbid (principal, action == Box::Action::"http:request", resource)
+when { context.input.host == "api.cloudflare.com" }
+unless {
+  context.input.intercepted && context.input.method == "GET" && (
+    context.input.path == "/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts" ||
+    context.input.path == "/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts/box-poc-workshop/deployments"
+  )
+};
+
+@id("no_worker_logs")
+@description("The Worker's logs hold attendee names and email addresses. The agent may not read them.")
+forbid (principal, action == Box::Action::"http:request", resource)
+when { context.input.host == "api.cloudflare.com" && context.input.path like "*/workers/observability/*" };
+```
+
+- `context.input.path like "*/workers/observability/*"`: a pattern, where `*` stands for any text. The Workers Logs routes of the Cloudflare API that read log content sit under `/workers/observability/`: the log query, live tail, and the keys and values of the logs. A script's tail sessions have a path of their own, under `/workers/scripts/<name>/tails/`; the first rule refuses those.
+
+**The run.** The same check as in iteration 3.
+
+<Command what="Checks the profile and its policy file again.">
+
+```sh
+box profile show ws
+```
+
+<Flag name="ws">The profile's name.</Flag>
+
+</Command>
+
+**What we see.** The profile is printed with no error: both rules load. This was checked while the workshop was written.
+
+<Why title="Why a second rule that changes no decision">
+
+`operate_requests_only` already refuses the logs query, because it is not one of the two reads. `no_worker_logs` changes no decision. It gives the refusal the story's reason, in the words of the security engineer, and it keeps refusing the logs if someone later widens the first rule. A pattern is safe here because this rule only refuses: if it matches more than intended, it refuses more.
+
+<Fragment slot="alternative">
+
+Leave it out. The logs stay refused, and the agent reads only the general reason, "Only two reads are allowed".
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+## How a refusal looks in the records
+
+You will see the refusal of the logs query in act c. Here is what to look for, and where.
+
+- **In the run's history.** A refused request is one row: `deny`, the action `http:request`, the resource `host:port/path`, the rule's id and the reason `a forbid rule matched`. Two filters of `box runs history` help: `--deny` prints only refusals, and `--action http:request` prints only API requests.
+- **In what the agent receives.** The gateway answers `403`, and the request never leaves the box. The body is the refusal text, in the form `http:request gate: policy denied this operation on '<host:port/path>' [policy: <id>]: <description>` (Box docs, `policy.md`). The proxy turns it into the error the script throws, starting `Refused by Box egress policy (rule: <id>)`.
+- **In the records file.** `$HOME/box-ws/r/<id>/records.jsonl` holds every decision as OpenTelemetry JSON. When two rules match, as `operate_requests_only` and `no_worker_logs` will, `box runs history` names one of them (which one differs between runs), and the record names both in `strands.box.policy.determining.ids`. Open the file with `less` and search for either name.
+
+<Command what="Prints only the API requests Box refused in one run.">
+
+```sh
+box runs history b-0123456789abcdef --deny --action http:request
+```
+
+<Flag name="b-0123456789abcdef">An example ID. Use your own run's.</Flag>
+<Flag name="--deny">Only refusals.</Flag>
+<Flag name="--action http:request">Only decisions on HTTP requests, so the agent's model traffic and the MCP rows drop out.</Flag>
+
+</Command>
+
+## The two seats
+
+<Seat who="security">
+
+You now write the constraint where the effect happens: on the request to Cloudflare. The rule does not depend on which tool the model picks, which script it writes or which operation name it finds; only on method, host and path. You can read the rule aloud: refuse everything on `api.cloudflare.com` except two `GET`s. What it cannot see is the request body and the response. An allowed read can still return personal data, as act c will show.
+
+</Seat>
+<Seat who="developer">
+
+The agent's tools do not change: still `search` and `execute`. Nothing is added to the model's context for these rules. A refused request costs a turn and comes back with a reason the agent can read and pass on. The price is that each extra read the team needs is a change to the security engineer's file.
+
+</Seat>
+
+## What to remember
+
+- The gateway decides each connection (`net:connect`) and each request (`http:request`) on its own.
+- A route writes the permits for its host and attaches the credential; it opens every method and path.
+- A `forbid ... unless` narrows the route to the exact requests the task needs. A permit cannot narrow a permit.
+- Policy sees the full path, `/client/v4/...`, without the query, and never the body.
+- A second rule that changes no decision can still carry the reason the story wants recorded.
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy/actions.md" source="Box docs">The actions and their fields, including `net:connect` and `http:request`</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy.md" source="Box docs">Policy: how a denial reads, and "Forbid one URL path on a host"</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference: routes and other hosts</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/egress.md" source="Box docs">Egress credential configuration</ReadMore>
+<ReadMore href="https://docs.cedarpolicy.com/" source="Cedar docs">The Cedar policy language</ReadMore>
+<ReadMore href="https://developers.cloudflare.com/workers/observability/logs/workers-logs/" source="Cloudflare docs">Workers Logs, what the refused routes hold</ReadMore>
+<ReadMore href="/part-3/policy-basics/" source="This workshop">Policy basics: how forbid and permit combine</ReadMore>

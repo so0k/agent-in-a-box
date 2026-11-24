@@ -1,0 +1,84 @@
+---
+/**
+ * A compact measurement strip for one act. Pass the values as measured, already
+ * formatted (they come from .research/measurements.md or a run you made).
+ * Leave a prop out when it was not measured; it shows as "not measured".
+ *
+ * Usage (MDX):
+ *   <Measure act="c" task="allowed" turns={2} tokens="6,055 in / 746 out" cost="$0.0172" wall="10 s" build="pkg" />
+ */
+interface Props {
+	act?: string;
+	task?: string;
+	turns?: number | string;
+	tokens?: number | string;
+	cost?: string;
+	wall?: string;
+	build?: string;
+}
+const { act, task, turns, tokens, cost, wall, build } = Astro.props;
+const fmt = (v: unknown) =>
+	v === undefined || v === null || v === '' ? 'not measured' : typeof v === 'number' ? v.toLocaleString('en-US') : String(v);
+const items: [string, string][] = [
+	['Turns', fmt(turns)],
+	['Tokens', fmt(tokens)],
+	['Cost', fmt(cost)],
+	['Wall time', fmt(wall)],
+	['Box build', fmt(build)],
+];
+const caption = ['Measured', act ? `act ${act}` : null, task ? `task: ${task}` : null].filter(Boolean).join(', ');
+---
+
+<figure class="aib-measure not-content">
+	<figcaption class="aib-label">{caption}</figcaption>
+	<dl>
+		{
+			items.map(([k, v]) => (
+				<div class:list={[{ 'aib-measure-missing': v === 'not measured' }]}>
+					<dt>{k}</dt>
+					<dd>{v}</dd>
+				</div>
+			))
+		}
+	</dl>
+</figure>
+
+<style>
+	.aib-measure {
+		margin: 1.25rem 0 0;
+		border: 1px solid var(--aib-outline);
+		border-radius: var(--aib-radius);
+		background: var(--aib-panel-bg);
+		padding: 0.6rem 1rem 0.75rem;
+	}
+	.aib-measure dl {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 2rem;
+		margin: 0;
+	}
+	.aib-measure dl > div {
+		margin: 0;
+	}
+	.aib-measure dt {
+		font-size: var(--sl-text-xs);
+		color: var(--sl-color-gray-3);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		font-weight: 700;
+	}
+	.aib-measure dd {
+		margin: 0;
+		padding: 0;
+		font-size: var(--sl-text-lg);
+		font-weight: 600;
+		color: var(--sl-color-white);
+		font-variant-numeric: tabular-nums;
+	}
+	.aib-measure-missing dd {
+		font-size: var(--sl-text-sm);
+		font-weight: 400;
+		color: var(--sl-color-gray-3);
+		font-style: italic;
+	}
+</style>

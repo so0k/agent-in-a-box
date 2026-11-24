@@ -1,0 +1,657 @@
+---
+title: "One-time set-up"
+description: "The tools, the three secrets in the keychain, shell variables, the Box home and the workspace."
+sidebar:
+  label: "Set-up"
+  order: 5
+---
+
+import { PartProgress, Pieces, Iteration, Command, Flag, Expect, Why, ReadMore } from '~/components';
+import { Aside, FileTree, Steps } from '@astrojs/starlight/components';
+
+<PartProgress current="start/setup" />
+
+This page prepares the one terminal you keep open for the whole workshop: the box build on your `PATH`, the three secrets in the macOS keychain and in shell variables, a Box home of its own, telemetry off, and the workspace folder with its first file. After it you will know where each secret lives at every moment, and why the folders are where they are. Part 1 starts from exactly this state.
+
+<Pieces stage={1} caption="This page fills the keychain and the developer's terminal. The secrets go from the keychain into the terminal's variables, never onto a command line or into a file." />
+
+Nothing is new in the picture. This page works on two of its pieces: the macOS keychain (top left) and the developer's terminal beside it.
+
+## Before you start: a clean terminal
+
+Open a new terminal window. The set-up below was proven in a fresh shell with nothing inherited. Two variables in particular would change every run if your shell already sets them: `ANTHROPIC_BASE_URL` changes where Claude Code sends its model calls, and `ANTHROPIC_MODEL` changes which model it uses.
+
+<Command what="Prints the two variables if they are set; prints nothing if they are not.">
+
+```sh
+printenv ANTHROPIC_BASE_URL ANTHROPIC_MODEL
+```
+
+<Flag name="ANTHROPIC_BASE_URL ANTHROPIC_MODEL">The names of the variables to print. `printenv` prints the value of each one that is set.</Flag>
+
+</Command>
+
+<Expect>Nothing is printed. If a line appears, open a terminal where your shell's start-up files do not set it, or remove it for this terminal with `unset` and the variable's name.</Expect>
+
+## Build the box CLI from source
+
+Iteration 1 below puts the folder `$HOME/box-build` on your `PATH`, so the build must be there first. You need the commands in this section only if you do not already have the workshop's build in that folder.
+
+<Aside type="caution" title="Derived, not run">
+
+The build commands below were worked out from the build record of the workshop's build (the author's notes, not published) and were not run for this site. The clone command is new and was not run for this site either.
+
+The fix is not in upstream Box. The clone fetches the branch `bugfix/mcp-shared-definitions-workshop` of the fork `so0k/box`: upstream commit `c70fec5` plus the fix. The site was measured on a build of the same commit with an earlier, uncommitted round of this fix, so a build from the branch is not byte-identical to it; whether it behaves the same in the acts was not checked. The same fix on current upstream main is the branch `bugfix/mcp-shared-definitions`. Upstream release v0.3.0 and upstream main still have the bug as of 2026-11-24, so the per-endpoint catalog act needs the fork build. The site's measurements were not repeated on v0.3.0 or on current main.
+
+</Aside>
+
+<details>
+<summary>The build commands, one at a time</summary>
+
+Work in an empty folder in your home (not under `/tmp`). You need git, mise (for the Rust toolchain) and a network connection for Rust's packages.
+
+<Steps>
+
+1. <Command what="Downloads the Box source with the fix, from the fork's workshop branch.">
+
+   ```sh
+   git clone --branch bugfix/mcp-shared-definitions-workshop https://github.com/so0k/box.git box-src
+   ```
+
+   <Flag name="--branch bugfix/mcp-shared-definitions-workshop">Checks out this branch after the download: upstream commit `c70fec5` plus the fix.</Flag>
+   <Flag name="https://github.com/so0k/box.git">The fork of `strands-agents/box` that holds the fix.</Flag>
+   <Flag name="box-src">The folder to clone into.</Flag>
+
+   </Command>
+
+2. <Command what="Moves into the downloaded source folder. Every command below runs from here.">
+
+   ```sh
+   cd box-src
+   ```
+
+   <Flag name="box-src">The folder `git clone` just made.</Flag>
+
+   </Command>
+
+3. <Command what="Builds the box CLI and its two helper programs with a pinned Rust toolchain.">
+
+   ```sh
+   MACOSX_DEPLOYMENT_TARGET=15.0 CARGO_HTTP_TIMEOUT=300 mise x rust@1.98.1 -- \
+     cargo build --release --locked -p strands-box-cli -p strands-box -p strands-box-containment \
+     --bin box --bin strands-box --bin strands-box-sock-alias --bin strands-box-contain-trampoline
+   ```
+
+   <Flag name="MACOSX_DEPLOYMENT_TARGET=15.0">The oldest macOS the binaries are built for, as the build record says.</Flag>
+   <Flag name="CARGO_HTTP_TIMEOUT=300">Gives slow package downloads up to 300 seconds.</Flag>
+   <Flag name="mise x rust@1.98.1 --">Runs the build with Rust 1.98.1, the version the build record names. Whether another version builds the same was not checked.</Flag>
+   <Flag name="--release">An optimised build.</Flag>
+   <Flag name="--locked">Refuses to change `Cargo.lock`, so the dependencies are exactly the source's.</Flag>
+   <Flag name="-p ... --bin ...">The packages and programs to build. `strands-box` (Box Core's own command) is built too, but the workshop does not use it.</Flag>
+
+   </Command>
+
+4. <Command what="Makes the folder the workshop uses for the build.">
+
+   ```sh
+   mkdir -p "$HOME/box-build/resources"
+   ```
+
+   <Flag name="-p">Makes `box-build` and `resources` inside it in one step, and gives no error if they already exist.</Flag>
+   <Flag name='"$HOME/box-build/resources"'>The build folder, with the `resources` folder the shipped files go into below.</Flag>
+
+   </Command>
+
+5. <Command what="Copies the box binary and its two helpers into the build folder.">
+
+   ```sh
+   cp target/release/box target/release/strands-box-sock-alias target/release/strands-box-contain-trampoline "$HOME/box-build/"
+   ```
+
+   <Flag name="strands-box-sock-alias, strands-box-contain-trampoline">The two helpers must sit beside `box`. The trampoline applies the macOS sandbox and then becomes the program it starts.</Flag>
+
+   </Command>
+
+6. <Command what="Copies the shipped packs, starters, policy starters and the agent guide beside the binary.">
+
+   ```sh
+   cp -R resources/config.toml resources/editing-box-profile.md resources/packs resources/plugins resources/policies resources/starters "$HOME/box-build/resources/"
+   ```
+
+   <Flag name="-R">Copies folders with everything in them.</Flag>
+   <Flag name="$HOME/box-build/resources/">The CLI looks for its shipped files in a `resources/` folder beside the binary, the way a release package lays them out.</Flag>
+
+   </Command>
+
+7. <Command what="Runs the new binary and prints its version. It changes nothing.">
+
+   ```sh
+   "$HOME/box-build/box" --version
+   ```
+
+   <Flag name="--version">Prints the version and exits.</Flag>
+
+   </Command>
+
+   It should print `box 0.1.0`.
+
+</Steps>
+
+</details>
+
+<ReadMore href="/results/builds-and-gaps/" source="This workshop">Builds and gaps: what this build is, and what a released Box still lacks</ReadMore>
+
+## The set-up, step by step
+
+<Iteration n={1} title="Put the workshop's box build first on the PATH">
+
+**What we add.** The folder of the local box build, in front of every other folder the shell searches for commands.
+
+**The run.**
+
+<Command what="Puts the workshop's box build in front of everything else on the PATH, for this terminal.">
+
+```sh
+export PATH="$HOME/box-build:$PATH"
+```
+
+<Flag name="export">Makes the variable visible to every program started from this terminal, not only to the shell itself.</Flag>
+<Flag name="$HOME/box-build">The folder that holds the build's `box` binary and its helpers ([requirements](/start/requirements/#the-box-cli-a-local-build)).</Flag>
+<Flag name=":$PATH">Keeps the folders that were already on the `PATH`, after the new one.</Flag>
+
+</Command>
+
+**What we see.** Nothing: an `export` prints nothing. Two checks show which `box` now answers.
+
+<Command what="Prints the path of the box command the shell finds.">
+
+```sh
+command -v box
+```
+
+<Flag name="-v">Prints the path the shell would run, without running it.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+<your-home>/box-build/box
+```
+
+</Expect>
+
+<Command what="Prints the version of the box that answers.">
+
+```sh
+box --version
+```
+
+<Flag name="--version">Prints the version and exits.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+box 0.1.0
+```
+
+</Expect>
+
+<Why>
+
+The workshop needs this one build (it carries a fix a released Box does not have yet). Putting its folder first means a plain `box` in every later command is this build, even if you also have a Box release installed. On the machine this site was written on, an installed `box` 0.1.8 also sits in `~/.local/bin`; with this line `command -v box` printed the build's path.
+
+<Fragment slot="alternative">
+
+Typing the full path `"$HOME/box-build/box"` in every command also works, but makes every command longer. Installing the build over a released `box` would change your other Box work.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+<Iteration n={2} title="Store the three secrets in the keychain, once">
+
+**What we add.** Three items in your login keychain, all under the account name `box-exec-proxy-poc`, one service name per secret:
+
+| Service name | The secret |
+|---|---|
+| `anthropic-api-key` | Your Anthropic API key |
+| `box-poc-mcp-token` | The Cloudflare MCP token (with User Details Read) |
+| `box-poc-agent-token` | The Cloudflare agent token |
+
+You do this once per machine, not once per terminal.
+
+**The run.** One command per secret. Each one asks you for the value; paste it at the prompt.
+
+<Aside type="note" title="Not run for this site">
+
+The three `add-generic-password` commands below were not run for this site: the items already existed on the machine it was written on.
+
+</Aside>
+
+<Command what="Adds the Anthropic API key to the login keychain, asking for the value instead of taking it on the command line.">
+
+```sh
+security add-generic-password -a box-exec-proxy-poc -s anthropic-api-key -w
+```
+
+<Flag name="add-generic-password">Adds a password item to the default keychain, which is your login keychain.</Flag>
+<Flag name="-a box-exec-proxy-poc">The account name. All three items share it, so the later commands find them by the pair of account and service.</Flag>
+<Flag name="-s anthropic-api-key">The service name: which secret this is.</Flag>
+<Flag name="-w">The value. Put last with nothing after it, `security` asks for the value instead of reading it from the command line. That is what keeps the secret out of your shell history and out of the process list.</Flag>
+
+</Command>
+
+```sh
+security add-generic-password -a box-exec-proxy-poc -s box-poc-mcp-token -w
+```
+
+```sh
+security add-generic-password -a box-exec-proxy-poc -s box-poc-agent-token -w
+```
+
+The two Cloudflare commands differ only in the service name. If an item already exists, `security` refuses to add it again; add `-U` before `-w` to update it instead.
+
+Their form is from `man security`, which says of `-w`: "Put at end of command to be prompted (recommended)". What exactly the prompt looks like, and whether it hides what you paste, was not checked.
+
+**What we see.** A check that each item exists, without printing its value:
+
+<Command what="Shows the keychain item's attributes; without -w it does not print the secret.">
+
+```sh
+security find-generic-password -s anthropic-api-key -a box-exec-proxy-poc
+```
+
+<Flag name="find-generic-password">Looks up one password item.</Flag>
+<Flag name="-s anthropic-api-key">The service name to look for.</Flag>
+<Flag name="-a box-exec-proxy-poc">The account name to look for.</Flag>
+
+</Command>
+
+<Expect title="What you should see (abridged)">
+
+```text
+keychain: "<your-home>/Library/Keychains/login.keychain-db"
+class: "genp"
+attributes:
+    "acct"<blob>="box-exec-proxy-poc"
+    "svce"<blob>="anthropic-api-key"
+```
+
+</Expect>
+
+A missing item prints `security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.` instead. Repeat the check with the two other service names.
+
+<Why>
+
+The keychain keeps the secrets encrypted on disk and out of every file you might copy, share or commit. By default the program that creates an item (here `security`) may read it later without a dialog (`man security`), which is what the next step does.
+
+<Fragment slot="alternative">
+
+`-w` followed by the value would put the secret in your shell history and, while the command runs, in the process list. A `.env` file or a line in your shell's start-up file would leave it on disk in plain text. Creating the items in the Keychain Access app works too; whether `security` can then read them without a dialog was not checked.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+<Iteration n={3} title="Read the secrets into shell variables">
+
+**What we add.** Three variables in this terminal, each read from its keychain item. You repeat this in every new terminal.
+
+**The run.**
+
+<Command what="Reads the Anthropic API key from the keychain into a variable, without showing it.">
+
+```sh
+export ANTHROPIC_API_KEY="$(security find-generic-password -s anthropic-api-key -a box-exec-proxy-poc -w)"
+```
+
+<Flag name="ANTHROPIC_API_KEY">The variable Claude Code reads its API key from. In the box acts the profile also names it, so Box knows which value to keep for itself.</Flag>
+<Flag name="$( ... )">Runs the command inside and puts what it prints into the variable, so the value never appears on the screen.</Flag>
+<Flag name="-w">On `find-generic-password`, prints only the secret's value. Here it goes into the variable, not to the screen.</Flag>
+
+</Command>
+
+<Command what="Reads the Cloudflare MCP token into a variable.">
+
+```sh
+export CLOUDFLARE_MCP_TOKEN="$(security find-generic-password -s box-poc-mcp-token -a box-exec-proxy-poc -w)"
+```
+
+<Flag name="CLOUDFLARE_MCP_TOKEN">The token for Cloudflare's MCP server. Claude Code fills it into the server's `Authorization` header from the MCP config file you write in step 7.</Flag>
+
+</Command>
+
+<Command what="Reads the Cloudflare agent token into a variable.">
+
+```sh
+export CLOUDFLARE_API_TOKEN="$(security find-generic-password -s box-poc-agent-token -a box-exec-proxy-poc -w)"
+```
+
+<Flag name="CLOUDFLARE_API_TOKEN">The token for direct calls to the Cloudflare API, which Box adds to each permitted request in act c.</Flag>
+
+</Command>
+
+**What we see.** Nothing on the screen. A check that a variable holds something, without printing it:
+
+<Command what="Prints set if the variable is not empty, and nothing otherwise.">
+
+```sh
+[ -n "$ANTHROPIC_API_KEY" ] && echo set
+```
+
+<Flag name="[ -n ... ]">A test that is true when the text is not empty.</Flag>
+<Flag name="&& echo set">Prints `set` only if the test was true. The value itself is never printed.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+set
+```
+
+</Expect>
+
+Repeat it with `CLOUDFLARE_MCP_TOKEN` and `CLOUDFLARE_API_TOKEN`.
+
+<Why>
+
+The value travels from the keychain straight into the variable. It never appears on a command line (the process list shows only `security` and the service name), on the screen or in a file. Exported variables reach every program you start from this terminal: Claude Code in act a reads them directly, and in the box acts Box reads them and gives the agent stand-ins instead (Part 2, [secrets and egress](/part-2/secrets-and-egress/)).
+
+<Fragment slot="alternative">
+
+Reading the secrets only on the line that needs them, for one command, keeps them out of the terminal for the rest of the session, but every act command would then carry a `security` call. Both Cloudflare tokens are broad on purpose ([requirements](/start/requirements/#why-the-tokens-are-broad)): treat this terminal as holding the keys to the account, and close it when you are done.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+<Iteration n={4} title="Give Box a home of its own, with a short path">
+
+**What we add.** The Box home: the folder where the box CLI keeps profiles, the agent's storage and the records of each run.
+
+**The run.**
+
+<Command what="Tells the box CLI to keep its profiles, storage and runs in a folder of its own.">
+
+```sh
+export BOX_HOME="$HOME/box-ws"
+```
+
+<Flag name="BOX_HOME">The box CLI's home folder. It must be a full path. Without it the CLI uses `~/.strands/box`.</Flag>
+<Flag name="$HOME/box-ws">A new folder just for this workshop. `ws` is short for workshop; the name is short on purpose (see below).</Flag>
+
+</Command>
+
+**What we see.** Nothing. A check of the path's length:
+
+<Command what="Counts the bytes in the Box home's path.">
+
+```sh
+echo -n "$BOX_HOME" | wc -c
+```
+
+<Flag name="echo -n">Prints the path without a newline after it, so the newline is not counted.</Flag>
+<Flag name="wc -c">Counts the bytes it receives.</Flag>
+
+</Command>
+
+<Expect title="What you should see (on the machine this site was written on)">
+
+```text
+      25
+```
+
+</Expect>
+
+The number must be 65 or less.
+
+<Why>
+
+**A folder of its own.** Nothing you already have in `~/.strands/box` (the default) or `~/.box` (the home of the older 0.1.x CLI) is read or changed, and you can delete the whole workshop with one folder.
+
+**A short path.** Each run gets a socket, a file through which the agent's side of the box talks to Box, at `<BOX_HOME>/r/b-<16 hex>/box/run/box.sock`. macOS limits a socket path to 103 bytes, and Box refuses to start a run whose socket path is longer. The socket path is the Box home plus 38 bytes, so the Box home may be at most 65 bytes. That limit is worked out from the path, not stated in Box's docs; a run with a 67-byte home was refused on this machine, and 59 and 62 bytes worked (see [Builds and gaps](/results/builds-and-gaps/)). `$HOME/box-ws` fits for any normal user name.
+
+<Fragment slot="alternative">
+
+Leaving `BOX_HOME` unset uses `~/.strands/box`, shared with any other Box work you do. A long folder name deep in your home can pass every other check and only fail when the first run starts.
+
+</Fragment>
+
+</Why>
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/files.md" source="Box docs">Where Box keeps its files</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/troubleshooting.md" source="Box docs">Troubleshooting, including the socket path limit</ReadMore>
+
+</Iteration>
+
+<Iteration n={5} title="Turn usage telemetry off for this terminal">
+
+**What we add.** One variable that stops the box CLI from sending usage events.
+
+**The run.**
+
+<Command what="Turns the box CLI's usage telemetry off for every command in this terminal.">
+
+```sh
+export BOX_TELEMETRY=0
+```
+
+<Flag name="BOX_TELEMETRY=0">Off for this terminal. The CLI checks `BOX_TELEMETRY` first, then `DO_NOT_TRACK`, then a saved choice; if none is set, telemetry is on.</Flag>
+
+</Command>
+
+**What we see.**
+
+<Command what="Prints whether telemetry is on, and what decided it.">
+
+```sh
+box telemetry status
+```
+
+<Flag name="telemetry status">Reports the setting; it changes nothing and sends nothing.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+Telemetry is off (set by BOX_TELEMETRY).
+```
+
+</Expect>
+
+<Why>
+
+**What it would send.** Only `box run` sends events: one at the start, a count of policy decisions about once a minute, and one at the end, to `https://telemetry.strandsagents.com/box/ping`. They hold a random installation id, a run id, the build, a hash of `profile.toml` and the names of the shipped packs it uses, whether it names policy files, custom packs or MCP servers, how start-up went, how many times each kind of action was permitted or denied, and how the run ended. They do not hold prompts, the agent's output, file contents or paths, credentials, commands, profile or policy text, or MCP tool names and arguments. They are sent from outside the box, so your profile's network rules do not apply to them. The data is kept for 13 months. (All of this is from Box's `CLI_TELEMETRY.md`.)
+
+**Why off here.** The workshop's runs are experiments, and the variable keeps everything inside the Box home: with it set, no `~/.strands` folder appeared on this machine.
+
+<Fragment slot="alternative">
+
+Leaving telemetry on is a fair choice: it helps the Box team see where the CLI fails, and it sends none of the content above. `box telemetry off` saves the choice for good, but writes it to `~/.strands/box/installation.toml`, outside the Box home. `DO_NOT_TRACK=1` also turns it off.
+
+</Fragment>
+
+</Why>
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/CLI_TELEMETRY.md" source="Box docs">Usage telemetry: what is collected and what is not</ReadMore>
+
+</Iteration>
+
+<Iteration n={6} title="Make the workspace folder and work in it">
+
+**What we add.** Two folders: the Box home itself, and the workspace, the team's operations folder in the story. The workspace holds only the MCP config files you write; the agent starts in it.
+
+**The run.**
+
+<Command what="Makes the Box home and the workspace folder, if they do not exist yet.">
+
+```sh
+mkdir -p "$BOX_HOME" "$HOME/leaderboard-ops"
+```
+
+<Flag name="-p">Makes missing parent folders too, and does nothing if the folder already exists.</Flag>
+<Flag name="$HOME/leaderboard-ops">The workspace. In the story it is where the team keeps what it uses to operate the leaderboard app.</Flag>
+
+</Command>
+
+<Command what="Makes the workspace the current folder.">
+
+```sh
+cd "$HOME/leaderboard-ops"
+```
+
+</Command>
+
+**What we see.**
+
+<Command what="Prints the current folder.">
+
+```sh
+pwd
+```
+
+</Command>
+
+<Expect>
+
+```text
+<your-home>/leaderboard-ops
+```
+
+</Expect>
+
+<Why>
+
+`box run` treats the folder it starts in as the agent's **project**, so every act starts from this folder. It is outside the Box home because Box refuses a project inside it (`project <BOX_HOME> holds ...; choose a project outside it`). It is in your home, not under `/tmp`, because a project under `/private/tmp` failed to start on this machine: the sandbox refused the grant as "too broad".
+
+<Fragment slot="alternative">
+
+Any folder in your home works if it is outside the Box home. A real repository of yours would also work, but then the agent could read its files once Part 2 gives it access to the project; an almost empty folder keeps the acts about Cloudflare.
+
+</Fragment>
+
+</Why>
+
+</Iteration>
+
+<Iteration n={7} title="Write the MCP config file for Cloudflare's server">
+
+**What we add.** One file in the workspace that tells Claude Code where Cloudflare's MCP server is and how to sign in to it. Open your editor and save this as `cloudflare-code-mode.json` in the workspace:
+
+```json title="$HOME/leaderboard-ops/cloudflare-code-mode.json"
+{
+  "mcpServers": {
+    "cloudflare": {
+      "type": "http",
+      "url": "https://mcp.cloudflare.com/mcp",
+      "headers": { "Authorization": "Bearer ${CLOUDFLARE_MCP_TOKEN}" }
+    }
+  }
+}
+```
+
+- `"cloudflare"` is the name Claude Code gives the server. Its tools appear as `mcp__cloudflare__<tool>`, and Box uses the same name in Part 2.
+- `"type": "http"` says the server is remote and reached over HTTP, not started as a local program.
+- `"url"` is Cloudflare's server. Without a query string it runs in code mode (Part 1).
+- `"headers"` adds the token to every request. `${CLOUDFLARE_MCP_TOKEN}` is a placeholder: Claude Code fills it from its own environment when it connects, so the file holds no secret.
+
+With this file saved, the two folders in your home hold this much:
+
+<FileTree>
+
+- box-ws/ the Box home, still empty
+- leaderboard-ops/ the workspace, where the agent starts
+  - **cloudflare-code-mode.json** you edit this
+
+</FileTree>
+
+**The run.** Nothing to run yet. Act a's free check is the first command that reads this file.
+
+**What we see.** Act a's free check shows the server as connected, which proves both the file and the MCP token.
+
+<Why>
+
+The same file works on the host (act a) and inside the box (Part 2). On the host the placeholder becomes the real token; inside the box it becomes Box's stand-in, because Box has replaced the variable's value before Claude Code starts. This was proven in acts a and b1.
+
+<Fragment slot="alternative">
+
+The token written into the file would leave the secret on disk. The same JSON passed inline to `--mcp-config` also works, but is harder to read in every command.
+
+</Fragment>
+
+</Why>
+
+<ReadMore href="https://code.claude.com/docs/en/mcp" source="Claude Code docs">Connect Claude Code to tools via MCP</ReadMore>
+
+</Iteration>
+
+## In every new terminal
+
+The exports last only as long as the terminal. If you open a new one, type steps 1, 3, 4 and 5 again and `cd` into the workspace. Here are those lines in one place, to copy one at a time:
+
+<details>
+<summary>The lines for a new terminal</summary>
+
+```sh
+export PATH="$HOME/box-build:$PATH"
+```
+
+```sh
+export BOX_HOME="$HOME/box-ws"
+```
+
+```sh
+export BOX_TELEMETRY=0
+```
+
+```sh
+export ANTHROPIC_API_KEY="$(security find-generic-password -s anthropic-api-key -a box-exec-proxy-poc -w)"
+```
+
+```sh
+export CLOUDFLARE_MCP_TOKEN="$(security find-generic-password -s box-poc-mcp-token -a box-exec-proxy-poc -w)"
+```
+
+```sh
+export CLOUDFLARE_API_TOKEN="$(security find-generic-password -s box-poc-agent-token -a box-exec-proxy-poc -w)"
+```
+
+```sh
+cd "$HOME/leaderboard-ops"
+```
+
+</details>
+
+<Aside type="note" title="Not checked">
+
+- The three `security add-generic-password` commands (the items already existed on the machine this site was written on), and what their prompt looks like.
+- Creating the keychain items in the Keychain Access app instead.
+- The build-from-source commands.
+- Any Box home other than the lengths named above.
+
+</Aside>
+
+## What to remember
+
+- The secrets live in the keychain, under account `box-exec-proxy-poc`, and reach the terminal only through `$(security ... -w)`.
+- `BOX_HOME="$HOME/box-ws"`: a home of its own, short enough for the 103-byte socket path.
+- `BOX_TELEMETRY=0` turns usage telemetry off for the terminal without writing anything outside the Box home.
+- The workspace `~/leaderboard-ops` is outside the Box home and not under `/tmp`.
+- `cloudflare-code-mode.json` holds a placeholder, never the token.
+
+## Read more
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/cli.md" source="Box docs">The box command reference, including its environment variables</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/getting-started.md" source="Box docs">Get started with the box CLI and Claude Code</ReadMore>
+<ReadMore href="https://code.claude.com/docs/en/settings" source="Claude Code docs">Claude Code settings and environment variables</ReadMore>

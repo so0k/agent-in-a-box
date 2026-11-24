@@ -1,0 +1,246 @@
+---
+title: "Policy basics: Cedar and Dogwood"
+description: "The anatomy of a rule, what each element represents, how decisions combine and what happens when nothing matches."
+sidebar:
+  label: "Policy basics"
+  order: 1
+  badge:
+    text: "Concept"
+    class: "aib-badge aib-badge-concept"
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import { PartProgress, Pieces, Command, Flag, Why, ReadMore, Expect, Seat } from '~/components';
+
+<PartProgress current="part-3/policy-basics" />
+
+After this page you can read and write a Box policy rule by hand: what each part of a rule stands for, how Box combines many rules into one decision, and how to check that a rule is in force. The story needs it now because act b1 ended with the logs of the workshop app on the developer's screen, and the security engineer's only way to stop that is a rule.
+
+<Pieces stage={3} />
+
+The picture is the one from act b1. Nothing is added on this page: we look inside one piece, the **policy engine**, and the files it reads. The policy engine is the part of Box that answers "permit or deny?" for every request the agent makes, and writes each answer to the records.
+
+## You already have rules
+
+You have not written a policy file yet, but your profile already produces rules. Box turns each table of `profile.toml` into rules and adds them to the run's policy. Print them:
+
+<Command what="Shows the profile as Box resolves it, including the box.toml and policy.dw a run would get.">
+
+```sh
+box profile show ws --full
+```
+
+<Flag name="ws">The profile's name: the folder `$HOME/box-ws/profiles/ws/`.</Flag>
+<Flag name="--full">Also prints the generated `box.toml` and `policy.dw`. Without it you see only packs, storage, project access and options, and no rules.</Flag>
+
+</Command>
+
+Near the end of the output, under `# policy.dw`, are these five lines (copied from a run of `--full` on this build with the profile as it stands at the end of act b1):
+
+```text title="Part of box profile show ws --full"
+@id("route_anthropic_connect") permit (principal, action == Box::Action::"net:connect", resource) when { (context.input.host == "api.anthropic.com" && context.input.port == 443) };
+@id("route_anthropic_request") permit (principal, action == Box::Action::"http:request", resource) when { context.input.host == "api.anthropic.com" };
+@id("mcp_cloudflare_call") permit (principal, action == Box::Action::"mcp:call", resource) when { context.input.server == "cloudflare" };
+@id("mcp_cloudflare_connect") permit (principal, action == Box::Action::"net:connect", resource) when { (context.input.host == "mcp.cloudflare.com" && context.input.port == 443) };
+@id("mcp_cloudflare_request") permit (principal, action == Box::Action::"http:request", resource) when { context.input.host == "mcp.cloudflare.com" };
+```
+
+The first two come from the `[egress.anthropic]` route you wrote on [Secrets and the egress gateway](/part-2/secrets-and-egress/). The last three come from the `[mcp.cloudflare]` table you wrote on [MCP through the broker](/part-2/mcp-through-the-broker/). Further down are rules for your storage folders (`storage_0_read` and so on), for the project (`project_read`), and forbids that keep the agent out of Box's own folders (`box_home_*`, `resources_*`, `protected_*`, `project_configuration_*`).
+
+These rules are written in **Dogwood**, the policy language of Box. Dogwood is **Cedar**, an open source language for authorization rules, plus rules that can look back at what happened earlier in the run. Everything on this page except the last section is plain Cedar.
+
+## The anatomy of a rule
+
+Take `mcp_cloudflare_call`, the rule that let act b1's `execute` run. Box prints it on one line. Spaces and line breaks do not matter in Cedar, so here it is laid out one element per line:
+
+```text title="mcp_cloudflare_call, laid out"
+@id("mcp_cloudflare_call")
+permit (
+  principal,
+  action == Box::Action::"mcp:call",
+  resource
+)
+when { context.input.server == "cloudflare" };
+```
+
+Read it aloud: "permit any MCP call, as long as the server is cloudflare". Element by element:
+
+### Annotations: `@id` and `@description`
+
+An **annotation** is a label in front of a rule. It starts with `@`. Annotations never change a decision (Cedar's own rule: "annotations have no impact on policy evaluation"). Box reads two of them:
+
+- `@id("...")` names the rule. The RULE column of `box runs history`, the records and the refusal text the agent receives all name the rule by its id. Box does not require one, but give every rule an id. It must be unique across your files and the ids Box generates; a clash stops the box from starting.
+- `@description("...")` is the text a `forbid` returns when it refuses. The agent reads the same text, so write it for the agent: say what is refused and why. The generated rules have no description because they only permit.
+
+### The effect: `permit` or `forbid`
+
+The **effect** is the word after the annotations. `permit` says "this request may go ahead". `forbid` says "this request must not go ahead". How several effects combine is the subject of [How decisions combine](#how-decisions-combine) below.
+
+### The scope: principal, action, resource
+
+The brackets after the effect hold the **scope**: who asks, for what, on what. In Cedar every request has these three parts.
+
+- `principal` is who makes the request. In Box it is always the agent (`Box::Agent::"self"`), so you write the bare word `principal` and never add a condition to it.
+- `action == Box::Action::"mcp:call"` names the kind of request. This is the part you always fill in. `action in [A, B]` lists several actions of one family.
+- `resource` is what the request is about. In Box it is always the same placeholder (`Box::Resource::"unused"`), so you write the bare word `resource`. The thing a request is about (a host, a path, a tool) is in the context instead.
+
+### The condition: `when`, `unless` and `context.input`
+
+After the brackets come zero or more **conditions**:
+
+- `when { ... }` means the rule applies only if the condition is true.
+- `unless { ... }` means the rule applies only if the condition is false. `forbid ... unless { ok }` reads "refuse everything except ok". You will write one in Part 4.
+
+A condition reads the request's details from `context.input`. Which fields there are depends on the action: an `mcp:call` has `server` and `method` (and `tool` on a tool call), a `net:connect` has `host` and `port`. The usual operators work: `==`, `!=`, `&&` (and), `||` (or), `!` (not), `<` and `>` on numbers, `like` with `*` as a wildcard, and `.contains(x)` on a list.
+
+A rule ends with `;`. Lines that start with `//` are comments and are ignored.
+
+<Why title="Why the generated rule has no tool in it">
+`mcp_cloudflare_call` checks only `server`. So it admits every method and every tool of the cloudflare server: `search`, `docs`, `execute` and the rest. That is why act b1 needed no policy file of yours, and why the logs came back.
+
+<Fragment slot="alternative">
+Box's docs show an allow-list written as a `permit` that names the tools. With the box CLI you cannot change the generated permit (it is written from the `[mcp.cloudflare]` table every run), so a restriction has to be a `forbid`. The next section shows why a second, narrower `permit` would not help.
+</Fragment>
+</Why>
+
+## The actions Box defines
+
+The action is the part of a rule you always choose. Box defines ten built-in actions, plus one action per tool of each MCP server it identifies (source: Box's action reference). Fields marked `?` are optional; a rule must test them with `has` before it reads them (Part 4 explains `has`).
+
+| Action | Who asks | Fields in `context.input` |
+|---|---|---|
+| `fs:read`, `fs:write`, `fs:delete`, `fs:move` | the box's shell and Python, for a file operation | `path`, `operation` |
+| `fs:other` | reserved; nothing raises it | `path`, `operation` |
+| `net:connect` | the egress gateway, once per connection, before encryption is set up | `host`, `port`, `ip4?`, `ip6?` |
+| `http:request` | the egress gateway, once per request, after it decrypted the request | `host`, `port`, `method`, `path`, `body_bytes`, `intercepted` |
+| `shell:exec` | the box's shell, for a command it implements itself (`cat`, `grep`, `curl`) | `command`, `program`, `arg1?`, `arg2?`, `arg_count`, `cwd` |
+| `shell:spawn` | the box's shell, for a program of the operating system; also at start for each local MCP server | the `shell:exec` fields plus `program_path`, `credential_reads?` |
+| `mcp:call` | the MCP broker (a local server) or the egress gateway (a remote server such as Cloudflare's) | `server`, `method`, `tool?`, `prompt?`, `uri?` |
+| `<server>::Action::"<tool>"` | after `mcp:call` permits a tool call, one per tool | the tool's own arguments |
+
+The last row is the **per-tool action**. When Box identifies a server, it reads the server's list of tools and makes one action per tool, named after the server's table in the profile. For your profile that means `cloudflare::Action::"execute"`, `cloudflare::Action::"search"` and so on. A tool call is decided twice: first as an `mcp:call`, then, if that is permitted, as the tool's own action. Act b2 uses the second one.
+
+In this workshop Claude Code runs with `--tools ""`, so it has no shell and never raises `fs:*` or `shell:*` requests. That is why no shell rule appears anywhere in the profile.
+
+## How decisions combine
+
+Three rules decide every request (Cedar's authorization rules, and Box's policy guide says the same):
+
+1. **Nothing matches: deny.** If no `permit` matches the request, it is refused. This is called **default deny**.
+2. **A matching `forbid` always wins.** If any `forbid` matches, the request is refused, whatever the permits say.
+3. **Otherwise a matching `permit` allows it.**
+
+The order of the rules in the file decides nothing. Box checks only one case of rules that disagree: a cap over time written as a `permit` (with a `when temporal` clause) beside another `permit` for the same action. If the other permit has no condition, Box refuses the policy and the box does not start; if it has a `when` condition, the box starts with a warning. A permit cannot narrow another permit, so write a cap as a `forbid`. Other disagreements between your rules are not checked.
+
+### What happens when nothing matches
+
+You saw default deny on [Secrets and the egress gateway](/part-2/secrets-and-egress/). Before the profile had a route, the egress gateway refused the model API, and the history said why:
+
+<Expect variant="refuse">
+
+```text
+deny       net:connect  api.anthropic.com:443  <default-deny> no permit matched
+```
+
+</Expect>
+
+`<default-deny>` in the RULE column means no rule of yours refused it: nothing permitted it. After you added `[egress.anthropic]`, the same request was decided by a generated permit and the row read `permit net:connect api.anthropic.com:443 route_anthropic_connect`.
+
+### A permit only widens
+
+Because a request goes through if any permit matches, adding a narrower permit next to a broad one changes nothing: the broad one still matches. Box's agent guide says it in one line: "A narrow permit does not limit a broad one." The only way to take something away from a permit is a `forbid`. Every rule the security engineer writes in Parts 3 and 4 is therefore a `forbid`.
+
+## Where policy files sit and how Box loads them
+
+A policy file is a text file with the `.dw` extension. It sits in the profile's folder, next to `profile.toml`, and the profile names it in a top-level list:
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml (first lines)"
+packs = ["@box/base"]
+policies = ["no-remote-execute.dw"]
+```
+
+`policies` is a top-level key like `packs`, so it must come before the first `[table]`. When you start a run, Box writes the run's own `policy.dw` into the run folder (`$HOME/box-ws/r/<box ID>/policy.dw`): your files first, in the order of the list, then the generated rules. Box Core, the engine that runs the box, loads that file before the agent starts.
+
+Box Core checks each rule against the actions and fields it knows. A rule with a spelling mistake in a built-in action or field, a field read without `has`, or a duplicate `@id` stops the box from starting, with the reason. `box profile show ws` runs the same check before any run.
+
+Per-tool rules are the exception. Box cannot check `cloudflare::Action::"execute"` until it has seen the server's list of tools, which happens only during a run. So per-tool rules wait, and are loaded once the list arrives.
+
+## How to tell that a rule loaded
+
+Four checks, from cheapest to most certain:
+
+1. **`box profile show ws` passes.** The file was found and every rule that can be checked before a run is well formed.
+2. **`box profile show ws --full` shows your rule at the top of `# policy.dw`.** It is in the policy a run gets.
+3. **The first run prints no per-tool warning.** If a per-tool rule could not be loaded, Box starts anyway and prints `strands-box: warning: a per-tool rule never loaded for ["cloudflare"]` on the terminal. Read the terminal after the first run of every per-tool rule.
+4. **A refusal names your rule.** `box runs history <box ID> --deny` shows the row, and the RULE column holds your `@id`.
+
+## What Dogwood adds to Cedar
+
+Cedar decides each request on its own. Dogwood adds **temporal conditions**: a rule can look back over the run's recorded events, for example "at most 20 file writes in one hour". This is the shape, from Box's policy guide:
+
+```text title="A temporal rule (from Box's policy guide, not used in this workshop)"
+@id("write_budget")
+@description("At most 20 content writes completed in one hour.")
+forbid (principal, action == Box::Action::"fs:write", resource)
+when { context.input.operation == Box::FsWriteOperation::"write_content" }
+when temporal {
+  exists (total: Long). (
+    (count for (t: Timepoint). where (
+      formerly within 1h (
+        Box::Action::"fs:write"::response{ input.path: _, input.operation: Box::FsWriteOperation::"write_content", output.result: Box::FsResponseResult::"completed" } && tp(t)
+      )
+    )) == total && total >= 20
+  )
+};
+```
+
+`when temporal` and `formerly within 1h` are the Dogwood parts. The history they read is kept per box. In the workshop app's story a security engineer could use this to cap deploys (say, two in ten minutes). The six acts never write to Cloudflare, so none of them needs a temporal rule. They are here so you know where the language goes next.
+
+## Two common mistakes
+
+### Writing a permit to narrow a permit
+
+The first rule many people write for "the agent may only search" is:
+
+```text
+@id("search_only")
+permit (principal, action == Box::Action::"mcp:call", resource)
+when { context.input.server == "cloudflare" && context.input has tool && context.input.tool == "search" };
+```
+
+It loads, and it changes nothing: `mcp_cloudflare_call` still permits every tool, and any one permit is enough. (Reasoned from the combining rules above and Box's guide; not run as a separate test in this workshop.) Write what must not happen as a `forbid`.
+
+### Misspelling a tool name
+
+A per-tool rule that names a tool the server does not have pins nothing. Box prints the per-tool warning, `box profile show` still passes, and the real tool stays permitted. In other words a typo in a tool name **fails open**. You will see this happen on purpose in [act b2](/part-3/act-b2/).
+
+<Aside type="note">
+The opposite mistake, a typo in an argument name, fails closed: every call to that tool is refused. Part 4 comes back to this on [Rules on a tool's arguments](/part-4/policy-on-arguments/).
+</Aside>
+
+## The two seats
+
+<Seat who="security">
+A rule has a fixed shape: an id, a reason, an effect, one action and a condition on the request's fields. For the vendor's server the policy can see which tool is called, but in code mode that is only `execute`, `search` or `docs`. The records name the rule behind every decision, so a refusal can be traced to the line that caused it.
+</Seat>
+<Seat who="developer">
+Nothing changes for the agent until a rule is added. When one is, the agent gets the rule's `@description` as its error text, so a well-written description tells the agent (and you) what to do instead. A permit you add cannot take anything away, so it cannot break the agent either.
+</Seat>
+
+## What to remember
+
+- A rule is: annotations, effect, scope (principal, action, resource), conditions on `context.input`, then `;`.
+- Nothing matches: deny. Any matching `forbid`: deny. Otherwise a matching `permit`: allow. Order does not matter.
+- Declaring `[mcp.cloudflare]` generates `mcp_cloudflare_call`, which permits every tool. Restrictions are `forbid`s.
+- Policy files sit next to `profile.toml` and are listed in `policies`. Per-tool rules load during the run, so read the terminal for the per-tool warning.
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy.md" source="Box docs">Box policy guide: rules, combining, refusals, temporal rules</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy.md#a-cap-written-as-a-permit" source="Box docs">Box policy guide: a cap written as a permit</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy/actions.md" source="Box docs">Action reference: every action and its fields</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/policies.md" source="Box docs">Policies in a box CLI profile</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/policies-reference.md" source="Box docs">Policies reference: file order and generated rule ids</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/tutorials/first-policy.md" source="Box docs">Tutorial: a first policy</ReadMore>
+<ReadMore href="https://docs.cedarpolicy.com/policies/syntax-policy.html" source="Cedar docs">Basic policy syntax</ReadMore>
+<ReadMore href="https://docs.cedarpolicy.com/auth/authorization.html" source="Cedar docs">Authorization: default deny and forbid overrides permit</ReadMore>
+<ReadMore href="https://docs.cedarpolicy.com/policies/syntax-operators.html" source="Cedar docs">Operators</ReadMore>
+<ReadMore href="https://dogwood-policy.github.io/dogwood/index.html" source="Dogwood docs">Dogwood: Cedar with temporal conditions</ReadMore>

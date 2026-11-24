@@ -1,0 +1,138 @@
+---
+/**
+ * Where the reader is: the five parts and six acts as a compact stepper.
+ * `current` is the page slug (as in the sidebar config). An act page marks its
+ * act; any other page in a part marks its part. Every step is a link.
+ *
+ * Usage (MDX):
+ *   <PartProgress current="part-2/act-b1" />
+ */
+import { PARTS } from './workshop-map';
+interface Props {
+	current: string;
+}
+const { current } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const href = (slug: string) => `${base}/${slug}/`;
+const currentPart = PARTS.find((p) => p.pages.includes(current) || p.acts.some((a) => a.slug === current));
+const currentAct = PARTS.flatMap((p) => p.acts).find((a) => a.slug === current);
+const partIndex = currentPart ? PARTS.indexOf(currentPart) : -1;
+---
+
+<nav class="aib-progress not-content" aria-label="Where you are in the workshop">
+	<ol>
+		{
+			PARTS.map((part, i) => {
+				const isCurrentPart = part === currentPart;
+				const state = partIndex === -1 ? 'todo' : i < partIndex ? 'done' : isCurrentPart ? 'current' : 'todo';
+				return (
+					<li class:list={['aib-progress-part', `is-${state}`]}>
+						<a
+							class="aib-progress-partlink"
+							href={href(part.pages[0])}
+							aria-current={isCurrentPart && !currentAct ? 'page' : undefined}
+						>
+							<span class="aib-progress-num">{part.n}</span>
+							<span class="aib-progress-name">{part.short}</span>
+						</a>
+						<ul class="aib-progress-acts">
+							{part.acts.map((act) => (
+								<li>
+									<a
+										href={href(act.slug)}
+										class:list={['aib-progress-act', { 'is-current': act === currentAct }]}
+										aria-current={act === currentAct ? 'page' : undefined}
+										title={`Act ${act.id}`}
+									>
+										{act.id}
+									</a>
+								</li>
+							))}
+						</ul>
+					</li>
+				);
+			})
+		}
+	</ol>
+</nav>
+
+<style>
+	.aib-progress {
+		margin: 0.5rem 0 1.5rem;
+	}
+	.aib-progress ol {
+		display: grid;
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		gap: 0.5rem;
+		list-style: none;
+		padding: 0;
+		margin: 0;
+	}
+	.aib-progress li {
+		margin: 0;
+	}
+	.aib-progress-part {
+		border-top: 4px solid var(--aib-line);
+		padding-top: 0.4rem;
+	}
+	.aib-progress-part.is-done {
+		border-top-color: var(--sl-color-gray-3);
+	}
+	.aib-progress-part.is-current {
+		border-top-color: var(--sl-color-accent);
+	}
+	.aib-progress-partlink {
+		display: flex;
+		gap: 0.4rem;
+		align-items: baseline;
+		text-decoration: none;
+		color: var(--sl-color-gray-2);
+		line-height: 1.3;
+		font-size: var(--sl-text-sm);
+	}
+	.is-current .aib-progress-partlink {
+		color: var(--sl-color-white);
+		font-weight: 600;
+	}
+	.aib-progress-partlink[aria-current='page'] .aib-progress-name {
+		text-decoration: underline;
+		text-underline-offset: 0.2em;
+	}
+	.aib-progress-num {
+		font-weight: 700;
+		color: var(--sl-color-accent);
+	}
+	.aib-progress-acts {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		list-style: none;
+		padding: 0;
+		margin: 0.4rem 0 0 !important;
+	}
+	.aib-progress-act {
+		display: inline-block;
+		min-width: 2.2rem;
+		text-align: center;
+		padding: 0.05rem 0.45rem;
+		border: 1px solid var(--sl-color-accent);
+		border-radius: 999px;
+		font-size: var(--sl-text-sm);
+		font-weight: 600;
+		text-decoration: none;
+		color: var(--sl-color-accent);
+		line-height: 1.5;
+	}
+	.aib-progress-act.is-current {
+		background: var(--sl-color-accent);
+		color: var(--sl-color-black);
+	}
+	:root[data-theme='light'] .aib-progress-act.is-current {
+		color: #fff;
+	}
+	@media (max-width: 40rem) {
+		.aib-progress ol {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

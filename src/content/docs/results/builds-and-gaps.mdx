@@ -1,0 +1,130 @@
+---
+title: "Builds and gaps"
+description: "The local builds this workshop used and every gap to a released Box."
+sidebar:
+  label: "Builds and gaps"
+  order: 3
+---
+
+import { PartProgress, Pieces, ReadMore } from '~/components';
+
+<PartProgress current="results/builds-and-gaps" />
+
+The workshop does not run on a released Box. This page says which build each act was measured on, what each build contains, and every gap between what you did here and what a released Box offers today, each with its status and what would close it. Read it before you repeat the workshop on another machine or quote a number from it.
+
+<Pieces stage={5} />
+
+The full picture from Part 5. Every piece on it ran on a local build; the pieces that depend on a fix that is not in upstream Box are the tool catalog of Part 4 (stage 4) and everything that reads it.
+
+## The builds
+
+All the local builds below are unreleased and carry only the linker's ad-hoc signature. They report `box 0.1.0`: local builds do not stamp a version, so the version string says nothing about what is inside. Each ships `box`, the two helper programs `strands-box-sock-alias` and `strands-box-contain-trampoline`, and a `resources/` folder beside the binary (the shipped packs, starters, policy starters and the agent guide). Toolchain: rustc 1.98.1, aarch64-apple-darwin.
+
+| Build | What it is | What it contains | Used for |
+|---|---|---|---|
+| **pkg-fix (the workshop's build)** | Public `strands-agents/box` main at `c70fec5` (#572) plus the `$defs` fix, built 2026-11-21 from an earlier round of the fix, as an uncommitted diff | The fix for three `$defs` constructs that stopped schema generation (below, gap 1). No other patch. `Cargo.lock` unchanged (`--locked` held) | Every command on this site; the curriculum's proofs (2026-11-22) |
+| pkg-main | Public main `c70fec5` plus an earlier local patch for the same problem (`core-01`) | The CLI as now imported into the Core repository, with #505 | Measurements of 2026-11-21 |
+| pkg | A pre-release build of the older CLI line, with Box Core moved to `217c860` by a local path override, plus `core-01` | Depends on two local uncommitted patches; built without `--locked` | Most newer-CLI measurements of 2026-11-21 |
+| box 0.1.11 | A release of the older CLI line | Same per-endpoint refusal as 0.1.8 | Two act b3 result files only |
+| box 0.1.8 | The installed release of the older CLI line (`~/.box` home) | No `BOX_HOME`; refuses the real per-endpoint catalog | Measurements of 2026-11-14 |
+
+The workshop teaches only the newer CLI's form (profiles under `$BOX_HOME`, packs named `@box/<name>`, `[project] access`). Profiles written for 0.1.8 do not carry over.
+
+### Which act was checked on which build
+
+"Paid" means a real headless run with a budget cap. "Free check" means the invalid-key run that connects the servers and stops at the first model call.
+
+| Act | box 0.1.8 | pkg | pkg-main | pkg-fix (this site) |
+|---|---|---|---|---|
+| a (no box) | no box involved; 3 runs | n/a | n/a | n/a: no box; one more paid verification run with Claude Code 2.1.330 (turns and cost only) |
+| b1 | works (3 runs) | works (logs) | free check | free check; paid (logs, one verification run: turns and cost only) |
+| b2 | works, refuses both tasks | works (logs) | free check | paid, both tasks |
+| b3 | does not work: the catalog is refused | works with `core-01` (61 to 64 s staging wait) | works (deployments-only task) | free check: connected, 3,053 tools; paid (steering sentence, two verification runs: turns and cost only) |
+| b3-args | not available | works (2 runs) | works | paid (one run): first call refused, second permitted; two more verification runs (turns and cost only) |
+| c | works | works | works (allowed) | paid, both tasks, plus the run before the API route |
+
+So the numbers on [Measurements](/results/measurements/) come from more than one build, and each says which. The verification runs on pkg-fix recorded only turns and cost, so the decisions and tokens shown for b1 and b3 come from pkg. That their decisions are the same on pkg-fix is an inference (the fix changes only schema generation), not a measurement.
+
+### Building pkg-fix yourself
+
+[Requirements](/start/requirements/) names the build as a requirement. In outline: clone the branch `bugfix/mcp-shared-definitions-workshop` of the fork `so0k/box` (upstream commit `c70fec5` plus a later round of the fix than the uncommitted diff pkg-fix was built from, so not byte-identical to pkg-fix; whether it behaves the same in the acts was not checked), build `box`, `strands-box-sock-alias` and `strands-box-contain-trampoline` with `cargo build --release --locked`, and copy the binaries and `resources/` into one folder. The build steps are derived from the build record, and none of these steps, the clone included, was **run** for this site. The same fix on current upstream main is the branch `bugfix/mcp-shared-definitions`. Upstream release v0.3.0 and upstream main still have the bug as of 2026-11-24, so the per-endpoint catalog act needs the fork build. The site's measurements were not repeated on v0.3.0 or on current main.
+
+## Gaps between this workshop and a released Box
+
+Status as read on 2026-11-21 and 2026-11-22 in the public strands-agents repositories (issues, pull requests and releases) and in the author's measurement notes (not published). Anything newer (merged, released, answered) was not checked, except where a row says 2026-11-24.
+
+### Gaps that need a change in Box
+
+| # | Gap | Status | What would close it |
+|---|---|---|---|
+| 1 | **One tool can refuse the whole MCP server.** Three `$defs` constructs stop schema generation: a definition name that is not a Cedar identifier (such as `iam_create-account`), a definition that is an array of objects, and a definition that refers to itself. Of the 3,053 per-endpoint tools, 441 have at least one. Box then refuses every call to the server with `the MCP tool catalog is not accepted`. | **Not upstream.** The fix is on the branch `bugfix/mcp-shared-definitions-workshop` of the fork `so0k/box`, on top of public main `c70fec5`, and on the branch `bugfix/mcp-shared-definitions` on current upstream main. Upstream release v0.3.0 and upstream main still have the bug as of 2026-11-24. An upstream issue and pull request for this fix were drafted but **not filed** (as read 2026-11-22), so this fix is not merged and not released. The earlier argument-name problem (#497) was fixed by #505, merged 2026-11-20; upstream release v0.3.0 contains #505 (checked 2026-11-24). | File the issue and pull request; review and merge; a release that contains it. |
+| 2 | **The tool list is held while Box stages the catalog.** Box types all 3,053 tools before it releases `tools/list`: 61.5 to 66.2 s measured. Claude Code's MCP start timeout defaults to 30 s, so it started with 0 Cloudflare tools, and Box printed no warning. | No upstream issue. | Staging off the request path, much cheaper staging, or a warning and documentation. The workshop sets `MCP_TIMEOUT = "300000"` in the profile. |
+| 3 | **No per-tool fallback.** One malformed tool fails the whole server and every per-tool rule with it. The fix removes the three known causes; others listed in the notes still refuse the server. | Open design point. | Leave out a tool Box cannot type, on its own, and keep the rest. |
+| 4 | **`cedar-for-agents` PR #267** would accept non-identifier names in the schema generator. It addresses only cause 1 of gap 1. | Open, no reviews (as read 2026-11-21); not in release 0.8.0. Box pins the generator at 0.6.1. | If it ships, part of the Box fix can go and generated type names change. |
+| 5 | **Open upstream PR #465** would key a remote catalog by address, path, query and session, so `?codemode=false` becomes part of the key. | Open, conflicted, review required (as read 2026-11-21). | No change needed in the workshop today. |
+| 6 | **No released CLI with the fix.** The CLI moved into the Core repository. Its release v0.3.0 (2026-11-23) still has the bug of gap 1. | Open as of 2026-11-24. | A release; until then, a local build. |
+
+### Limits and design facts the workshop works around
+
+| # | Fact | Status | How the workshop handles it |
+|---|---|---|---|
+| 7 | Box refuses a run whose broker socket path is over 103 bytes. The path is the Box home plus 38 bytes (derived), so `BOX_HOME` may be at most 65 bytes. The CLI does not check this up front. | Documented limit. | `BOX_HOME="$HOME/box-ws"`, short for any normal user name. |
+| 8 | Tool names cost tokens: 3,053 names are sent on every request even with tool search (75,349 tokens measured on the list of 2026-11-14, 11 names fewer); a per-endpoint run cost 7.4 to 13.9 times act a or c. With tool search off the request is refused (about 2.2 million tokens against a 1,000,000 limit). | Inherent to per-endpoint mode and the client, not a Box defect. | Tool search on in Part 4; the local exec proxy in Part 5. |
+| 9 | A tool-name allow-list must name every tool a model might pick: in act b3 Claude chose `workers_list`, which the list did not name. | Design gap of the allow-list, not a Box bug. | The b3 steering sentence names the one tool to use. |
+| 10 | The per-endpoint catalog is 6,540,316 bytes, 78% of Box's 8 MiB cap per list. It grew by 11 tools, to 3,053, in a week. | Limit, not filed. | None needed today. |
+| 11 | Usage telemetry is on by default in the newer CLI. `box telemetry off` writes a file outside `BOX_HOME`. | By design, documented. | `BOX_TELEMETRY=0` in the shell. |
+| 12 | The vendor's `execute` hides the API call from Box (act b1). | By design: the reason for acts b2 and c. | Act c. |
+| 13 | Argument typing edge cases (an argument of unknown type, objects without properties, date formats) are not shown for rules on arguments. | Not tested. | Rules on typed arguments only, such as `path.account_id`. |
+| 14 | Policy-writing traps: a rule naming actions of two namespaces must be split; a rule on an MCP tool's response loads but never matches (issue #396); a per-tool `permit` that does not match falls back to the server's permit. | Known behaviour (#396 open). | Part 4 writes `forbid` rules. |
+| 15 | Interactive mode was checked only up to its first screen; it has no dollar cap. | Not checked further. | Measured steps are headless with `--max-turns` and `--max-budget-usd`. |
+
+## Gaps in the box CLI
+
+What the workshop wanted from the box CLI and could not get, on the pkg-fix build. "Measured" means seen in the curriculum's runs; "source" means from docs or earlier notes.
+
+| # | Wanted | What the CLI does | Workaround used | Evidence |
+|---|---|---|---|---|
+| 1 | Create a Claude Code profile without importing your own Claude Code configuration | `box profile create` needs an agent pack; the only Claude Code pack, `@box/claude`, copies CLAUDE.md, rules, commands, agents, output styles, themes and keybindings from `~/.claude` with no option to turn those off | Write `profile.toml` by hand | measured, source |
+| 2 | A skeleton for a hand-written profile | No empty-profile option | `mkdir` and an empty file | measured |
+| 3 | A live view of decisions in a second pane | `box runs history` is a snapshot, with no follow option; the banner is live but one line | Repeat `box runs history <id> --tail 20` | measured |
+| 4 | A readable records file | `records.jsonl` is OpenTelemetry JSON, one batch per line, 7 to 13 KB per line; the docs suggest `jq` or `otel-tui` | `box runs history`; `less` on the file | measured |
+| 5 | All the rules that decided a refusal | The history shows one rule id when two forbids matched; the record lists both | Read `records.jsonl` | measured |
+| 6 | See what a profile declares | Plain `box profile show` omits the MCP servers and credential routes | `box profile show <profile> --full` | measured |
+| 7 | Validate a per-tool rule before a run | A rule naming a missing tool passes `show`; the only sign is a run-time line that names neither the rule nor the tool | Read stderr on the first run | measured |
+| 8 | List a server's tool names and argument types | No command; schema generation is Core-only and not shipped | Claude Code's `init` event; the vendor's docs | source |
+| 9 | Know that the tool list is being staged | No message; the client times out | `MCP_TIMEOUT` | measured |
+| 10 | `box run` to end when the agent ends | The agent gave up after about 30 s, `box run` returned at 150 s (167 s in another run) | Wait | measured |
+| 11 | Staging time that does not depend on unrelated rules | 70.4 and 70.8 s with rules that load; 162.8 s in the one run with a rule that never loaded (one run each, cause not proven) | Remove rules for tools the catalog lacks | measured |
+| 12 | The reason a local MCP server failed | Only `MCP server closed stdout before it sent a complete response`; the server's own error output is not shown | Reason from the startup report | measured |
+| 13 | A record of sandbox refusals of the agent's own file access | Claude Code's `EPERM` errors left no history row | Read the agent's own errors | measured, source |
+| 14 | An agent environment that inherits nothing | Without `@box/base` the agent got your whole `PATH`; a local MCP server always does; `HOME` is your home | `@box/base` for the agent | measured |
+| 15 | Answer Claude Code's first-run questions once | The stand-in key is new every run, so the API key question returns on every interactive run | Up arrow, Enter | measured |
+| 16 | Start-up lines that match what happened | A run that fails on a missing credential variable first prints a box ID, a records path, a reuse command and a history command. Nothing is saved: no run folder, no line in `box runs list`, and `box runs history <id>` fails with "No such file or directory" | Read the last line (`credential setup failed`), set the variable, run again | measured |
+| 17 | Help text that follows `BOX_HOME` | `--help` examples say `~/.strands/box` | `box help agent` prints the real home | source |
+| 18 | Turn telemetry off inside `BOX_HOME` | `box telemetry off` writes outside `BOX_HOME` | `BOX_TELEMETRY=0` | source |
+| 19 | A permit you write yourself for an MCP server | Declaring `[mcp.<name>]` always generates a permit for every method and tool; restrictions can only be forbids | Forbid rules (b2, b3) | measured |
+| 20 | A released CLI with the fix | None | Local build | source |
+| 21 | An early check of the broker socket path length | Core refuses at start | Keep `BOX_HOME` at most 65 bytes | source |
+| 22 | Remove the agent's transcripts from storage, and nothing else | Claude Code keeps a transcript of every run in storage, under `agent/config/projects/`, and storage outlives the run. `box profile reset` deletes the whole storage, settings and first-run answers included; there is no option for the transcripts alone | `ls -R` and `rm -r` on the `projects` folder ([act b1](/part-2/act-b1/#the-transcripts-in-storage)) | measured, source |
+
+## Not checked
+
+- Decisions and token counts of acts b1 and b3 on pkg-fix (their paid runs there recorded turns and cost only). Paid runs of b1's allowed task and of b3's logs and allowed tasks on pkg-fix.
+- Token counts for the 3,053-tool catalog (only the list of 2026-11-14, 11 tools fewer, was counted).
+- Any status of the upstream pull requests, issues and releases after 2026-11-21.
+- The build-from-source steps above, as typed.
+- What the newer `@box/claude` pack copies from a populated `~/.claude` (this workshop never lets it).
+
+## What to remember
+
+- Every command here ran on pkg-fix, a local build of public main `c70fec5` plus a fix that is not yet filed upstream.
+- The fix that makes Part 4 work is not upstream, and an issue and a pull request for it are drafted, not filed. The fork branch `bugfix/mcp-shared-definitions-workshop` holds a later review round of it on the same commit as pkg-fix: a build from the branch is not byte-identical to pkg-fix, and the acts were not run again on it.
+- `box 0.1.0` is an unstamped local version, not a release.
+- The CLI gaps are mostly about seeing: live decisions, readable records, and checking a rule before a run.
+
+<ReadMore href="https://github.com/strands-agents/box" source="Box docs">The Box repository</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/getting-started.md" source="Box docs">Get started with the CLI, and the planned release</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/troubleshooting.md" source="Box docs">Troubleshooting, including the socket path limit</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/mcp-discovery.md" source="Box docs">How Box discovers and stages MCP tools</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp-policy.md" source="Box docs">Write policy for an MCP server</ReadMore>
+<ReadMore href="/results/measurements/" source="This workshop">Measurements, with the build of each number</ReadMore>
