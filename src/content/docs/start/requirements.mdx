@@ -13,63 +13,25 @@ import { Aside } from '@astrojs/starlight/components';
 
 This page lists what you need to run the acts yourself, with one command to check each item. You only need all of it to run the acts; to follow the explanations, a browser is enough, because every page shows the real output of the runs made for this workshop.
 
-<Pieces stage={1} caption="Everything on this picture is something you need: a Mac with a terminal and a keychain, Claude Code, an Anthropic API key, and a Cloudflare account with an app on it." />
-
-Nothing is new in the picture yet. This page is about the pieces of stage 1 and the box CLI that Part 2 adds.
-
 ## What was used to write this site
 
-Every check below was run on one machine on 2026-11-22: macOS 26.7.1 on Apple silicon, Claude Code 2.1.330, Node 22.23.4, and the local box build described below. Other versions were not checked.
+Every check below was run on macOS 26 on Apple silicon, Claude Code 2.1.330, Node 22.23.4, and the local box build described below. Other versions were not checked.
 
 ## A Mac with Apple silicon
 
 Box supports macOS on Apple silicon. On macOS it uses Seatbelt, the operating system's own process sandbox.
 
-<Command what="Prints the processor architecture of this terminal.">
-
-```sh
-uname -m
-```
-
-<Flag name="-m">Prints only the machine hardware name. A terminal running under Rosetta (Apple's translator for Intel programs) prints `x86_64` even on Apple silicon; run Box from a terminal that prints `arm64`.</Flag>
-
-</Command>
-
-<Expect>
-
-```text
-arm64
-```
-
-</Expect>
-
-<Command what="Prints the macOS version.">
-
-```sh
-sw_vers -productVersion
-```
-
-<Flag name="-productVersion">Prints only the version number.</Flag>
-
-</Command>
-
-<Expect>
-
-```text
-26.7.1
-```
-
-</Expect>
-
-The box build used here was compiled for macOS 15.0 and later (`MACOSX_DEPLOYMENT_TARGET=15.0` in its build record). It was run on macOS 26.7.1 only; earlier versions were not checked.
+The box build used here was compiled for macOS 15.0 and later (`MACOSX_DEPLOYMENT_TARGET=15.0` in its build record). It was run on macOS 26.7 only; earlier versions were not checked.
 
 <ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/macos-requirements/" source="Box docs">macOS requirements</ReadMore>
 
 ## The box CLI: a local build
 
-This workshop needs one fix to the box CLI that is not in a released Box yet. Without it, Box refuses every tool of Cloudflare's one-tool-per-operation server in Part 4, because 441 of its 3,053 tools describe their arguments in ways Box could not read ([Builds and gaps](/results/builds-and-gaps/)). So the site uses **one local build**, made from the public Box source (`strands-agents/box` main at commit `c70fec5`) plus that fix. The fix is published as the branch `bugfix/mcp-shared-definitions-workshop` of the fork `so0k/box`, in a later round than the one the site was measured on ([Set-up](/start/setup/) says what that means). Upstream release v0.3.0 and upstream main still have the bug as of 2026-11-24. It prints `box 0.1.0`; that version string is not stamped for local builds and does not mean an old release.
+This workshop needs one fix to the box CLI that is not in a released Box yet. Without it, Box refuses every tool of Cloudflare's one-tool-per-operation server in Part 4, because 441 of its 3,053 tools describe their arguments in ways Box could not read ([Builds and gaps](/results/builds-and-gaps/)).
 
-The site assumes the build sits in `$HOME/box-build`: the `box` binary, its two helper programs `strands-box-sock-alias` and `strands-box-contain-trampoline`, and a `resources/` folder beside them. [Set-up](/start/setup/#build-the-box-cli-from-source) has the build commands, and [Builds and gaps](/results/builds-and-gaps/) explains the build and everything a released Box still lacks.
+To follow the full workshop, you must have **one local build**, made from the public Box source (`strands-agents/box` main at commit `c70fec5`) plus that fix. The fix is published as the branch `bugfix/mcp-shared-definitions-workshop` of the fork `so0k/box`. Upstream release v0.3.0 and upstream main still have the bug as of 2026-11-24. Local builds may print `box 0.1.0`; if the version string is not stamped, it does not mean we used an old release at the time of writing.
+
+The workshop assumes the build sits in `$HOME/box-build`: the `box` binary, its two helper programs `strands-box-sock-alias` and `strands-box-contain-trampoline`, and a `resources/` folder beside them. [Set-up](/start/setup/#build-the-box-cli-from-source) has the build commands, and [Builds and gaps](/results/builds-and-gaps/) explains the build and everything a released Box still lacks.
 
 <Command what="Runs the workshop's box build and prints its version.">
 
@@ -85,6 +47,7 @@ The site assumes the build sits in `$HOME/box-build`: the `box` binary, its two 
 <Expect>
 
 ```text
+# for local builds that don't stamp the version string
 box 0.1.0
 ```
 
@@ -92,7 +55,7 @@ box 0.1.0
 
 ## Claude Code
 
-Claude Code is the agent in every act. The profile you write in Part 2 starts it from `~/.local/bin/claude`, which is where Anthropic's native installer puts it. If yours is elsewhere, you change one path in the profile.
+Claude Code is the agent in every act. The profile you write in Part 2 starts it from `~/.local/bin/claude`, which is where Anthropic's native installer puts it. If yours is elsewhere, change the path in the profile.
 
 <Command what="Prints the path of the claude command your shell finds.">
 
@@ -127,6 +90,7 @@ claude --version
 <Expect>
 
 ```text
+# version at the time of writing
 2.1.330 (Claude Code)
 ```
 
@@ -138,7 +102,7 @@ Your own Claude Code settings, memory and MCP servers are never used: every act 
 
 ## Node 22, for the local MCP server in Part 5
 
-Part 5 runs a small MCP server inside the box, the local exec proxy. It is a Node program. The profile names the Node installation by its full path, because inside the box the agent's `PATH` does not include your Node. This site uses Node 22.23.4 installed with mise, a tool version manager; any other installation works if you change the path in the profile (not checked).
+Part 5 runs a small MCP server inside the box, the local exec proxy. It is a Node program. The profile names the Node installation by its full path, because inside the box the agent's `PATH` does not include your Node. This workshop uses Node 22.23.4 installed with [mise, a tool version manager](https://mise.jdx.dev/getting-started.html); any other installation should work if you change the path in the profile.
 
 <Command what="Prints the folder of the Node 22 installation that mise manages.">
 
@@ -163,7 +127,7 @@ mise where node@22
 
 ## The exec proxy repository, for Part 5
 
-The local exec proxy lives in the public repository [so0k/box-exec-proxy](https://github.com/so0k/box-exec-proxy), in `proxy/`. The site assumes a copy at `$HOME/box-exec-proxy`. The Cloudflare API description the proxy searches, `spec/spec.json`, is not in the repository: the repository's script `tools/fetch-spec.sh` downloads it. The commands in this section were not run for this site.
+The local exec proxy lives in the public repository [so0k/box-exec-proxy](https://github.com/so0k/box-exec-proxy), in `proxy/`. The workshop assumes a copy at `$HOME/box-exec-proxy`. The Cloudflare API description the proxy searches, `spec/spec.json`, is not in the repository: the repository's script `tools/fetch-spec.sh` downloads it.
 
 <Command what="Downloads the exec proxy repository into your home folder.">
 
@@ -226,7 +190,7 @@ The workshop uses two tokens with nearly the same permissions:
 | The **MCP token** (`box-poc-mcp` in the worked example) | Cloudflare's remote MCP server, in the first five acts | Workers Scripts Write, Workers Tail Read, Workers Observability Read, Workers Observability Write, D1 Write, Workers KV Storage Write, Account Settings Read, **User Details Read** |
 | The **agent token** (`box-poc-agent`) | Direct calls to the Cloudflare API from inside the box, in the request-rules act | The same list without User Details Read |
 
-Both are restricted to the one account. In the worked example they expire on 2026-12-13.
+Both are restricted to the one account.
 
 ### Why the tokens are broad
 
@@ -235,8 +199,6 @@ Both tokens can do everything the security engineer wants to refuse: read the lo
 ### Why there are two
 
 Cloudflare's remote MCP server accepts a user token only if both `GET /user` and `GET /accounts` answer. `GET /user` needs User Details Read. The agent token lacks it, and the server refused that token when it connected (403 `insufficient_scope`, recorded in the author's measurement notes, not published). The MCP token adds User Details Read and leaves the agent token unchanged. Apart from that one permission the two match: whatever the vendor's server can do with the MCP token, the local exec proxy can do with the agent token.
-
-A third token exists in the worked example, a deploy token for the app's owner. The agent never gets it, and you do not need it.
 
 ### Check
 

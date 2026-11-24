@@ -32,7 +32,7 @@ This guided workshop explains how to sandbox your AI coding agent. It does so by
 A **sandbox** is a boundary around a program that decides what it may read, write, run and reach on the network. **Strands Box** (Box for short) is an open source sandbox engine for AI agents. You drive it with the **box CLI**, the `box` command.
 </Aside>
 
-## The Perspectives:
+## The Perspectives
 
 Every stage is told from the perspective of a Developer and a Security Engineer. This is presented on every concept and act page as shown here.
 
@@ -51,7 +51,7 @@ The site is for people who want to understand the moving parts and the trade-off
 
 ## Your takeaways
 
-- **What is a Box**: Box contains the agent's files, its network, its secrets and its tools. We learn which part of Box enforces each.
+- **What is Box**: Box contains the agent's files, its network, its secrets and its tools. We learn which part of Box enforces each.
 - **Writing Profiles and Policies**: How a Box profile and a policy file are built up.
 - **The ingredients**: What Box can see of an MCP tool call, and why a generic `execute` remote tool is hard to secure.
 - **Policy design**: Three ways to put a decision on each Cloudflare operation (refuse the tool, one tool per operation, or decide each HTTP request) and how it impacts the developer.
@@ -62,27 +62,27 @@ The site is for people who want to understand the moving parts and the trade-off
 
 ### From start to Finish
 
-Start sets the scene. Five parts each answer one question, and each ends in one or two acts. Results puts the acts side by side.
+Start sets the scene. Five parts each answer one question and concludes with how an agent acts. Results puts the acts side by side.
 
 <CardGrid>
-	<LinkCard title="Start" description="Sets the scene: the story, the sample app the agent will help operate, what you need and the one-time set-up." href="/start/story/" />
+	<LinkCard title="Start" description="The story, the sample app the agent will help operate, what you need and the one-time set-up." href="/start/story/" />
 	<LinkCard title="Part 1, An agent with a broad token" description="Claude Code and Cloudflare's MCP server, no box. Ends in the token-scope act." href="/part-1/mcp-and-code-mode/" />
 	<LinkCard title="Part 2, Put the agent in a box" description="The same server, with the agent inside a box. Ends in the opaque-execute act." href="/part-2/what-box-contains/" />
 	<LinkCard title="Part 3, Write the policy" description="A policy rule refuses <code>execute</code> by name. Ends in the deny-execute act." href="/part-3/policy-basics/" />
 	<LinkCard title="Part 4, One tool per operation" description="The server offers one tool per API operation, and a rule decides on tool names and arguments. Ends in the tool-allowlist and argument-rules acts." href="/part-4/per-endpoint-catalog/" />
 	<LinkCard title="Part 5, Bring code mode into the box" description="A local MCP server inside the box runs the agent's script, and each API request is decided at the network gateway. Ends in the request-rules act." href="/part-5/local-execute/" />
-	<LinkCard title="Results" description="Puts the acts side by side: the whole picture, the measurements, the gaps to a released Box, and further reading." href="/results/the-whole-picture/" />
+	<LinkCard title="Results" description="The whole picture, the measurements, the gaps to a released Box, and further reading." href="/results/the-whole-picture/" />
 </CardGrid>
 
-### Three kinds of page
+### Three types of content
 
-The badge after a page's name in the sidebar says what kind of page it is.
+The badge next to an entry in the sidebar says what kind of content it provides.
 
 | Badge | What the page does |
 |---|---|
-| Concept | Explains one idea when the story first needs it, and shows it in this workshop's real files or output. |
+| Concept | Introduces the ideas as they're needed, and shows them in context of the workshop's real files or output. |
 | Hands-on | Builds part of the profile or the policy in small iterations. Each iteration is one change, one command, what you see, and why. |
-| Act | One of the six moments where the agent runs a task. The page gathers your files, launches the agent, and shows what came back and what Box decided. |
+| Act | An agent interaction. We gather our files, launch the agent, and reason about what came back and what Box decided. |
 
 Each hands-on and act page starts with a collapsed block called "your files at this point". It holds the complete files, so if you get lost you can paste them into your editor and carry on.
 
@@ -93,7 +93,7 @@ Each hands-on and act page starts with a collapsed block called "your files at t
 | Act | Part | Where the decision is made |
 |---|---|---|
 | token-scope | 1 | Only in the API token's scope. Claude Code uses Cloudflare's MCP server with no box. |
-| opaque-execute | 2 | In the box, but Box sees only that `execute` was called, not what the script did. |
+| opaque-execute | 2 | In the `box`, but Box sees only that `execute` was called, not what the script did. |
 | deny-execute | 3 | A policy rule refuses `execute` by name. |
 | tool-allowlist | 4 | An allow-list of tool names, with one tool per API operation. |
 | argument-rules | 4 | A rule on one tool's arguments: the tool may run on one account only. |
@@ -105,21 +105,21 @@ What each act shows is on [the story](/start/story/) page.
 
 ### Our evolving diagram
 
-The architecture diagram starts with the few pieces of a set-up without a sandbox. Each part adds pieces, and each page shows the diagram at its stage with the new pieces marked. This is the starting picture:
+The architecture diagram starts without a sandbox. Each part adds pieces, and each page shows the diagram at its stage with the new pieces marked. This is the starting picture:
 
-<Pieces stage={1} caption="Stage 1: the developer's terminal, Claude Code, Cloudflare's MCP server and API, and the sample app. No sandbox yet." />
+<Pieces stage={1} caption="Stage 1: the developer's terminal, Claude Code, Cloudflare's MCP server and API, and the sample app. No sandbox." />
 
 Every piece keeps its place on later pages, so you can watch the box appear around Claude Code in Part 2 and fill up in Parts 3 to 5.
 
-### Commands you type, files you write
+### Commands and files
 
-There are no launcher scripts on this site. Every step is one command that you type, and every flag is explained under it. The Box profile and the policy files are written out by you, one setting or one rule at a time, starting from the smallest file that runs.
+Every step is one command for you to type, and every flag is explained under it. The Box profile and the policy files are written out by you, one setting or one rule at a time, starting from the smallest file that runs.
 
 Most steps are checked with a **free check**: the command runs with an invalid model key, so Claude Code connects its MCP server and stops at its first model call. Nothing is billed. The acts themselves are real runs, which cost money; each act page says what one run cost when it was measured.
 
 ## How long each part takes
 
-Reading time was not measured. What was measured is how long one run of each act took on the clock (from [Measurements](/results/measurements/)):
+How long each act took on the clock (from [Measurements](/results/measurements/)) - excluding reading time:
 
 <div class="aib-acts-3">
 
@@ -133,15 +133,15 @@ Reading time was not measured. What was measured is how long one run of each act
 
 </div>
 
-The times for the five boxed acts come from local box builds made before a released Box had what this workshop needs (the build this site uses among them), with Claude Code 2.1.330. [Builds and gaps](/results/builds-and-gaps/) explains the builds.
+The times for the five boxed acts come from local box builds before a released Box filled early gaps, with Claude Code 2.1.330. [Builds and gaps](/results/builds-and-gaps/) explains any local builds used at the time of writing.
 
 ## What to remember
 
 - One problem, solved in five parts; six acts are the hands-on moments.
-- Two seats on every concept and act page: the security engineer's and the developer's.
+- Two perspectives on every concept and act page: the security engineer's and the developer's.
 - Concepts arrive when the story needs them, one per page.
-- No scripts: you type every command and write every file.
-- Every number on this site was measured, and says where it came from. Anything not checked says "not checked".
+- Hands-on means you type every command and write every file.
+- Every number in the workshop was measured, and says where it came from. Anything not checked says "not checked".
 
 ## Read more
 
