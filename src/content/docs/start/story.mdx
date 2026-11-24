@@ -37,7 +37,7 @@ However, the next task sounds just as reasonable to a developer chasing a proble
 
 <Prompt label="The logs task">Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef.</Prompt>
 
-> the account id. `0123456789abcdef0123456789abcdef` is a stand-in for a real Cloudflare account id.
+> The account id `0123456789abcdef0123456789abcdef` is a stand-in for a real Cloudflare account id.
 
 ## The security engineer's job
 
@@ -106,8 +106,8 @@ The outcomes below are the ones measured for this workshop (the numbers are on [
 |---|---|---|
 | [token-scope](/part-1/token-scope/) | Claude Code and Cloudflare's server, no box. | Both tasks are done. The logs task returns log lines. Nothing on the developer's side decides or records which API calls the scripts made. |
 | [opaque-execute](/part-2/opaque-execute/) | The same server, the agent inside a box, `execute` permitted. | Both tasks are still done and the logs still come back. Box records each tool call, but all it sees is "`execute` was called", not what the script did. |
-| [deny-execute](/part-3/deny-execute/) | A rule refuses `execute` by name. | Both tasks are refused even harmless work. |
-| [tool-allowlist](/part-4/tool-allowlist/) | The server offers one tool per API operation (3,053 tools); a rule allows a short list of read tools. | The logs tool is refused by name. The control is precise, but each run carries about 240,000 input tokens and a wait while Box prepares the tools; and the agent must pick a tool that is on the list. |
+| [deny-execute](/part-3/deny-execute/) | A rule refuses `execute` by name. | Both tasks are refused, even harmless work. |
+| [tool-allowlist](/part-4/tool-allowlist/) | The server offers one tool per API operation (3,053 tools); a rule allows a short list of read tools. | The logs tool is refused by name. The control is precise, but each run carries about 250,000 input tokens and a wait while Box prepares the tools; and the agent must pick a tool that is on the list. |
 | [argument-rules](/part-4/argument-rules/) | A rule on one tool's arguments. | The same tool is refused on another account and permitted on the workshop's account. |
 | [request-rules](/part-5/request-rules/) | A local MCP server inside the box runs the agent's script; Box decides each API request at its network gateway. | The allowed task is done in one `execute`. The logs request is refused at the gateway, by method and path. |
 

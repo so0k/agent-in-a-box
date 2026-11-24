@@ -11,10 +11,10 @@ import { PartProgress, Pieces, SampleApp, Prompt, Seat, ReadMore } from '~/compo
 
 <PartProgress current="start/the-sample-app" />
 
-This sample app is useful to illustrate the concepts driving this workshop only, it's most sensitive data is names and email addresses of workshop attendees. 
+This sample app is useful to illustrate the concepts driving this workshop only, its most sensitive data is names and email addresses of workshop attendees. 
 
 Read this for an explanation on how the sample app works and where it keeps this sensitive data, as well as which Cloudflare operations someone running it uses. We conclude with the security engineer's constraints in plain words. Every policy rule we write later is one of those constraints.
-0
+
 The workshop tells a teaching story around this real, small app. The app runs on a real Cloudflare account (here with a stand-in id `0123456789abcdef0123456789abcdef`). The workshop samples and rules are written for explanations in context of this sample app, but we highlight what it would mean for your own app.
 
 The overview comes from ["The sample app" section](https://github.com/so0k/box-exec-proxy#the-sample-app) of the box-exec-proxy README, and the app's code is in [`sample-app/`](https://github.com/so0k/box-exec-proxy/tree/main/sample-app) of the same repo.
@@ -24,7 +24,7 @@ The overview comes from ["The sample app" section](https://github.com/so0k/box-e
 In the architecture diagram the whole app is one piece, behind the Cloudflare API. The agent reads and changes the app only through the Cloudflare API, the same API the Cloudflare dashboard and the `wrangler` command use. That is why every constraint below is written as
 > "Which Cloudflare API operations may the agent use".
 
-In this workshop the agent interaction with app's own web routes is not considered.
+In this workshop the agent interaction with the app's own web routes is not considered.
 
 <Pieces stage={1} caption="The sample app is the piece at the bottom right: the Cloudflare API is the only way in for the agent." />
 
@@ -36,9 +36,9 @@ In this workshop the agent interaction with app's own web routes is not consider
 1. Track progress of each attendee of a hands-on workshop
 2. Show everyone's progress on a board for the facilitator (the person running the workshop).
 3. Attendees read the workshop on a website. Small components on those pages call the Worker's JSON API.
-3. An attendee gets an anonymous session the first time they record progress. They may add a name and an email address to appear on the board.
-4. When an attendee presses "Next", the Worker checks the attendee's own deployed endpoint and marks the page green, yellow or blue.
-5. The Worker writes structured logs that include names, emails and endpoints, on purpose, so the logs are sensitive.
+4. An attendee gets an anonymous session the first time they record progress. They may add a name and an email address to appear on the board.
+5. When an attendee presses "Next", the Worker checks the attendee's own deployed endpoint and marks the page green, yellow or blue.
+6. The Worker writes structured logs that include names, emails and endpoints, on purpose, so the logs are sensitive.
 
 </Steps>
 

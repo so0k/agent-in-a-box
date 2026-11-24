@@ -51,7 +51,7 @@ Input tokens are all kinds added (uncached, cache write, cache read), as Claude 
 <Seat who="developer">
 
 - Code mode is cheap: a handful of tools, a few thousand input tokens for a simple task.
-- One tool per operation cost about 240,000 input tokens and about USD 0.22 to 0.25 a run, and a wait of about a minute before the agent had its tools.
+- One tool per operation cost about 250,000 to 330,000 input tokens and about USD 0.22 to 0.25 a run, and a wait of about a minute before the agent had its tools.
 - The local exec proxy keeps code mode's cost and shape (the request-rules act: 8,300 input tokens, USD 0.0215, one `execute`), and a refusal comes back with a reason the agent can pass on.
 - The price moves to the policy file: every new read the team needs is a line the security engineer adds.
 
