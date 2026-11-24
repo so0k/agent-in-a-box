@@ -1,40 +1,54 @@
 ---
-title: "The sample app: a workshop progress tracker"
+title: "A workshop progress tracker"
 description: "The running example: the box-poc-workshop Worker, its Durable Objects, D1, KV and logs, the personal data it holds and the constraints the security engineer wants."
 sidebar:
   label: "The sample app"
   order: 3
 ---
 
+import { Steps } from '@astrojs/starlight/components';
 import { PartProgress, Pieces, SampleApp, Prompt, Seat, ReadMore } from '~/components';
 
 <PartProgress current="start/the-sample-app" />
 
-This page explains the app the agent will help operate: what it is for, how its pieces work together, where it keeps names and email addresses, and which Cloudflare operations someone running it uses. It ends with the security engineer's constraints in plain words. Every policy rule you write later is one of those constraints, so the story needs them now.
+This sample app is useful to illustrate the concepts driving this workshop only, it's most sensitive data is names and email addresses of workshop attendees. 
 
-It is a teaching story around a real, small app. The app runs on a real Cloudflare account (this site shows the stand-in id `0123456789abcdef0123456789abcdef`); the team, the developer and the security engineer are made up. You do not need this app, or any Cloudflare set-up like it, to follow the explanations: every sample and every rule on this site is written for it, and each one says what it would mean for your own app.
+Read this for an explanation on how the sample app works and where it keeps this sensitive data, as well as which Cloudflare operations someone running it uses. We conclude with the security engineer's constraints in plain words. Every policy rule we write later is one of those constraints.
+0
+The workshop tells a teaching story around this real, small app. The app runs on a real Cloudflare account (here with a stand-in id `0123456789abcdef0123456789abcdef`). The workshop samples and rules are written for explanations in context of this sample app, but we highlight what it would mean for your own app.
 
-## Where the app sits in the picture
+The overview comes from ["The sample app" section](https://github.com/so0k/box-exec-proxy#the-sample-app) of the box-exec-proxy README, and the app's code is in [`sample-app/`](https://github.com/so0k/box-exec-proxy/tree/main/sample-app) of the same repo.
+
+## The big picture
+
+In the architecture diagram the whole app is one piece, behind the Cloudflare API. The agent reads and changes the app only through the Cloudflare API, the same API the Cloudflare dashboard and the `wrangler` command use. That is why every constraint below is written as
+> "Which Cloudflare API operations may the agent use".
+
+In this workshop the agent interaction with app's own web routes is not considered.
 
 <Pieces stage={1} caption="The sample app is the piece at the bottom right: the Cloudflare API is the only way in for the agent." />
 
-In the architecture diagram the whole app is one piece, behind the Cloudflare API. The agent never talks to the app's own web routes. It reads and changes the app only through the Cloudflare API, the same API the Cloudflare dashboard and the `wrangler` command use. That is why every constraint below is written as "which Cloudflare API operations may the agent use".
 
-## What the app is for
+## What does the App do
 
-1. It tracks how far each attendee of a hands-on workshop has got, and shows everyone's progress on a board for the facilitator, the person running the workshop.
-2. Attendees read the workshop on a website. Small components on those pages call the Worker's JSON API.
+<Steps>
+
+1. Track progress of each attendee of a hands-on workshop
+2. Show everyone's progress on a board for the facilitator (the person running the workshop).
+3. Attendees read the workshop on a website. Small components on those pages call the Worker's JSON API.
 3. An attendee gets an anonymous session the first time they record progress. They may add a name and an email address to appear on the board.
 4. When an attendee presses "Next", the Worker checks the attendee's own deployed endpoint and marks the page green, yellow or blue.
 5. The Worker writes structured logs that include names, emails and endpoints, on purpose, so the logs are sensitive.
 
-It is the progress tracker of a real workshop (the TerraConstructs AWS workshop). The data seeded for the workshop's tests is synthetic: invented names and `@example.com` addresses. Source for this page: the ["The sample app" section](https://github.com/so0k/box-exec-proxy#the-sample-app) of the box-exec-proxy README, and the app's code in [`sample-app/`](https://github.com/so0k/box-exec-proxy/tree/main/sample-app).
+</Steps>
+
+It is a sample progress tracker of a real workshop. The data seeded for the workshop's tests is synthetic: invented names and `@example.com` addresses. 
 
 The story calls it a "leaderboard" because the board shows everyone's progress side by side. The board is not ranked by a score: it lists the attendees who opted in, in the order they joined.
 
 ## The architecture
 
-<SampleApp caption="The workshop progress tracker and leaderboard on Cloudflare. A ring marks a place that holds names and email addresses." />
+<SampleApp caption="The workshop progress tracker and leaderboard on Cloudflare." />
 
 ### The Worker
 

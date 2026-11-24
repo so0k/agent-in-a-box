@@ -1,81 +1,104 @@
 ---
-title: "The story and the two seats"
+title: "The story"
 description: "A team runs a small app on Cloudflare; a developer wants a coding agent to help operate it, and a security engineer writes the constraints."
 sidebar:
   label: "The story"
   order: 2
 ---
 
+import { Aside } from '@astrojs/starlight/components';
 import { PartProgress, Pieces, Prompt, Seat, ReadMore } from '~/components';
 
 <PartProgress current="start/story" />
 
-This page tells the story the whole workshop follows: who wants what, and why the two wishes pull against each other. After it you will know the question each of the five parts answers and what each act will show. Every later page refers back to the people and the two tasks introduced here.
+Context for the workshop: who wants what, and what friction exists. Here we tie together the questions each workshop section answers and what each agent interaction is meant to show.
 
-The story is a teaching story. The app in it is real and small, and it really runs on a Cloudflare account. The team, the developer and the security engineer are made up to give the steps a reason.
+The story is a teaching story. The app in it is small and demonstrative, but it really runs on a Cloudflare account. The team, the developer and the security engineer are made up for this workshop.
 
-## The team and its app
+## The team and the app
 
-A team runs the **workshop progress tracker and leaderboard**. Attendees of a hands-on workshop read the workshop pages on a website; the tracker records how far each attendee has got, and a board shows everyone's progress side by side for the person running the workshop. It runs on Cloudflare as one Worker, `box-poc-workshop`, with two kinds of Durable Object, a D1 database, a KV namespace and Workers Logs. The next page, [the sample app](/start/the-sample-app/), explains each piece.
+A team runs the **[TerraConstructs AWS Workshop](https://terraconstructs.dev/workshops/aws/) progress tracker and leaderboard**. Attendees of this hands-on workshop complete workshop steps; the tracker records how each attendee progresses, and a board shows this progress for the person running the workshop. It runs on Cloudflare as one Worker, `box-poc-workshop`, with two kinds of Durable Object, a [D1 database](https://developers.cloudflare.com/d1/#features), a [KV namespace](https://developers.cloudflare.com/kv/#features) and Workers Logs. 
 
-What matters for the story: attendees may add their name and email address to appear on the board, so the app's **logs** and its **database** hold names and email addresses. That is personal data.
+<Aside type="note">
+
+What matters for the story: workshop attendees may add their name and email address to appear on the board, so the app's **logs** and its **database** hold names and email addresses. That is personal data which requires special care when working with agents.
+
+</Aside>
+
+To skip the story, jump directly to [the sample app](/start/the-sample-app/) for an explanation of how it works.
 
 ## The developer's wish
 
-The developer wants a coding agent, Claude Code, to help operate the app on the company's Cloudflare account: list the Workers, check the current deployment, look into a problem. Two task sentences stand for this work in every act. The first is the kind of task the team wants the agent to do:
+The developer wants a coding agent, Claude Code, to help operate the app on the company's Cloudflare account: list the Workers, check the current deployment, look into a problem. 
 
-<Prompt label="The allowed task">List the Workers on Cloudflare account 0123456789abcdef0123456789abcdef and summarise the current deployment of the Worker box-poc-workshop.</Prompt>
+<Prompt label="An example of an allowed task">List the Workers on Cloudflare account 0123456789abcdef0123456789abcdef and summarise the current deployment of the Worker box-poc-workshop.</Prompt>
 
-The second is the kind of task that sounds just as reasonable to a developer chasing a problem, and that the security engineer does not want the agent to do:
+However, the next task sounds just as reasonable to a developer chasing a problem, but a security engineer has been tasked to prevent these:
 
 <Prompt label="The logs task">Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef.</Prompt>
 
-Both sentences are the ones the workshop's earlier demo used, word for word, except the account id. `0123456789abcdef0123456789abcdef` is a stand-in: put your own Cloudflare account id in its place, here and on every later page.
+> the account id. `0123456789abcdef0123456789abcdef` is a stand-in for a real Cloudflare account id.
 
 ## The security engineer's job
 
-The security engineer writes the constraints. In plain words: the agent may read what it needs to operate the app, but it must not read the logs or the stored attendee data, because they hold personal data, and it must not deploy or delete anything. [The sample app](/start/the-sample-app/#the-security-engineers-constraints) page lists the constraints one by one with the reason for each. The policies you write in Parts 3 to 5 are those constraints.
+The security engineer writes the constraints. In plain words:
 
-To enforce a constraint, the security engineer needs a place where each Cloudflare operation can be seen and allowed or refused, one by one. Finding that place is what the workshop is about.
+<Aside type="caution">
 
-## The vendor's server and its one generic tool
+the agent may read what it needs to operate the app, but it must not read the logs or the stored attendee data, because they hold personal data, and it must not deploy or delete anything.
 
-The agent reaches Cloudflare through Cloudflare's own **MCP server**. MCP, the Model Context Protocol, is a standard way for an agent to find and call tools that another program offers. Cloudflare's server runs in what Cloudflare calls **code mode**: instead of one tool per API operation, it offers a `search` tool to look up operations in the API description, and an `execute` tool that runs a short script the agent writes. The script calls the Cloudflare API on Cloudflare's side and returns the result. (Other servers call the same idea `execute_script`.)
+</Aside>
 
-Code mode is cheap in tokens: the agent sees a handful of tools instead of thousands. But a single `execute` call can do anything the token allows. Whoever wants to decide "this operation yes, that one no" sees only "the agent called `execute`". [MCP servers and code mode](/part-1/mcp-and-code-mode/) explains the design.
+[The sample app](/start/the-sample-app/#the-security-engineers-constraints) reiterates on these constraints with reasoning. In Parts 3 to 5 we write those constraints as policies.
+
+To enforce a constraint, the security engineer needs a place where each Cloudflare operation can be seen and allowed or refused. Defining that place is what the workshop is about.
+
+## An MCP server with one generic tool
+
+The agent interacts with Cloudflare through Cloudflare's own **MCP server**. MCP, the Model Context Protocol, is a standard way for an agent to find and call tools that another program offers. Cloudflare's server runs in what Cloudflare calls **code mode**: instead of one tool per API operation, it offers a `search` tool to look up operations in the API description, and an `execute` tool that runs a short script the agent writes. The script calls the Cloudflare API on Cloudflare's side and returns the result. (Other servers call the same idea `execute_script`.)
+
+Code mode is cheap in tokens: the agent sees a handful of tools instead of thousands and a process that requires multiple tool calls does not fill the context with intermediary results. But a single `execute` call can do anything the token allows. Whoever wants to decide "this operation first, and only then that one" sees only "the agent called `execute`". 
+
+Our workshop [MCP servers and code mode](/part-1/mcp-and-code-mode/) section explains that design.
 
 ## The starting picture
 
+- Three secrets (the model key and two Cloudflare tokens) held in the macOS keychain
+- The developer's terminal, secrets read into shell variables
+- Claude Code with an Anthropic API that runs the model
+- Cloudflare's MCP server in "code mode" in front of the Cloudflare API
+- The sample app managed via this API
+
 <Pieces stage={1} />
 
-This is everything at the start, before any sandbox: the developer's terminal, the macOS keychain that holds the three secrets (the model key and two Cloudflare tokens), Claude Code, the Anthropic API that runs the model, Cloudflare's MCP server in code mode, the Cloudflare API, and behind it the sample app. Claude Code holds the real Cloudflare token and talks to Cloudflare's server directly. Nothing sits in between to decide anything.
+Claude Code holds the real Cloudflare token and talks to Cloudflare's server directly. Nothing sits in between to apply any policy.
 
-## Two seats, two questions
+## The perspectives
 
 <Seat who="security">
 
-Your question on every page is: what can the policy see, what can it decide, and what does it record? At the start the answer is "nothing": there is no policy. Your task is to find the place where each Cloudflare operation becomes visible, and to write the rules that refuse the logs, the attendee data, deploys and deletes.
+At this stage the answer is "nothing". Your task is to find the place where each Cloudflare operation becomes visible, and to write the rules that refuse the logs, the attendee data, deploys and deletes.
 
 </Seat>
 <Seat who="developer">
 
-Your question on every page is: what can the agent still do, and what does it cost in tokens, time and friction? At the start the answer is "everything, cheaply". Every control the security engineer adds may take something away: a task the agent can no longer do, more tokens per run, or more set-up.
+At this stage the answer is "everything, cheaply". Every control the security engineer adds may take something away: a task the agent can no longer do, more tokens per run, or more set-up.
 
 </Seat>
 
-## Five parts, five questions
+## Considerations
 
 | Part | The question it answers |
 |---|---|
 | 1, [An agent with a broad token](/part-1/mcp-and-code-mode/) | What happens when an agent with a broad Cloudflare token uses the vendor's code mode, with nothing in between? |
 | 2, [Put the agent in a box](/part-2/what-box-contains/) | What does a sandbox control (files, network, secrets, tools), and what can it see of an MCP tool call? |
 | 3, [Write the policy](/part-3/policy-basics/) | Can a policy rule stop the logs task when all it sees is a call to `execute`? |
-| 4, [One tool per operation](/part-4/per-endpoint-catalog/) | If every API operation is its own tool, can a policy allow some operations and refuse others, even by their arguments? What does that cost? |
+| 4, [One tool per operation](/part-4/per-endpoint-catalog/) | If every API operation is its own tool, how does a policy allow some operations and refuse others, even by their arguments? What does that cost? In terms of friction and tokens. |
 | 5, [Bring code mode into the box](/part-5/local-execute/) | Can we keep code mode's small tool list and still decide every API request? |
 
-## Six acts, what each will show
+## Agent observations
 
-The outcomes below are the ones measured for this workshop (the numbers are on [Measurements](/results/measurements/)). Each act page shows the runs in full.
+The outcomes below are the ones measured for this workshop (the numbers are on [Measurements](/results/measurements/)). Each shows the measuring runs in full.
 
 <div class="aib-acts-1">
 
@@ -83,19 +106,12 @@ The outcomes below are the ones measured for this workshop (the numbers are on [
 |---|---|---|
 | [token-scope](/part-1/token-scope/) | Claude Code and Cloudflare's server, no box. | Both tasks are done. The logs task returns log lines. Nothing on the developer's side decides or records which API calls the scripts made. |
 | [opaque-execute](/part-2/opaque-execute/) | The same server, the agent inside a box, `execute` permitted. | Both tasks are still done and the logs still come back. Box records each tool call, but all it sees is "`execute` was called", not what the script did. |
-| [deny-execute](/part-3/deny-execute/) | A rule refuses `execute` by name. | Both tasks are refused, the harmless one too. Control costs usefulness. |
+| [deny-execute](/part-3/deny-execute/) | A rule refuses `execute` by name. | Both tasks are refused even harmless work. |
 | [tool-allowlist](/part-4/tool-allowlist/) | The server offers one tool per API operation (3,053 tools); a rule allows a short list of read tools. | The logs tool is refused by name. The control is precise, but each run carries about 240,000 input tokens and a wait while Box prepares the tools; and the agent must pick a tool that is on the list. |
 | [argument-rules](/part-4/argument-rules/) | A rule on one tool's arguments. | The same tool is refused on another account and permitted on the workshop's account. |
 | [request-rules](/part-5/request-rules/) | A local MCP server inside the box runs the agent's script; Box decides each API request at its network gateway. | The allowed task is done in one `execute`. The logs request is refused at the gateway, by method and path. |
 
 </div>
-
-## What to remember
-
-- The app is small and real; the people in the story are made up.
-- The allowed task and the logs task appear in every act, word for word.
-- The vendor's `execute` tool is cheap for the developer and opaque to the security engineer.
-- Each part answers one question; the acts are where you see the answer.
 
 ## Read more
 

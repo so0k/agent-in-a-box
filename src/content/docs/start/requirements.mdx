@@ -13,55 +13,15 @@ import { Aside } from '@astrojs/starlight/components';
 
 On this page we list what you need to run the acts yourself, with one command to check each item. You need all of it only to run the acts. To follow the explanations, a browser is enough, because every page shows the real output of the runs made for this workshop.
 
-<Pieces stage={1} caption="Everything on this picture is something you need: a Mac with a terminal and a keychain, Claude Code, an Anthropic API key, and a Cloudflare account with an app on it." />
-
-Nothing is new in the picture yet. This page is about the pieces of stage 1 and the box CLI that Part 2 adds.
-
 ## What was used
 
-The runs for this workshop were made on one machine on 2026-11-24, with Claude Code 2.1.331, Node 22.23.4, the released Box 0.3.0, and for Part 4 a build of a Box fork at commit `535307a`. The macOS version was not recorded that day; it was 26.7.1 when it was checked on 2026-11-22. Other versions were not checked.
+The runs for this workshop were made on macOS 26 on Apple silicon, with Claude Code 2.1.331, Node 22.23.4, the released Box 0.3.0, and for Part 4 a build of a Box fork at commit `535307a`. Other versions were not checked.
 
 ## A Mac with Apple silicon
 
 Box supports macOS on Apple silicon. On macOS it uses Seatbelt, the operating system's own process sandbox.
 
-<Command what="Prints the processor architecture of this terminal.">
-
-```sh
-uname -m
-```
-
-<Flag name="-m">Prints only the machine hardware name. A terminal running under Rosetta (Apple's translator for Intel programs) prints `x86_64` even on Apple silicon; run Box from a terminal that prints `arm64`.</Flag>
-
-</Command>
-
-<Expect>
-
-```text
-arm64
-```
-
-</Expect>
-
-<Command what="Prints the macOS version.">
-
-```sh
-sw_vers -productVersion
-```
-
-<Flag name="-productVersion">Prints only the version number.</Flag>
-
-</Command>
-
-<Expect title="What you should see (checked on 2026-11-22)">
-
-```text
-26.7.1
-```
-
-</Expect>
-
-The fork build for Part 4 is compiled for macOS 15.0 and later (`MACOSX_DEPLOYMENT_TARGET=15.0` in its build command). The macOS version was checked as 26.7.1 on 2026-11-22 and not recorded on 2026-11-24; earlier versions were not checked.
+The fork build for Part 4 is compiled for macOS 15.0 and later (`MACOSX_DEPLOYMENT_TARGET=15.0` in its build command). The workshop was run on macOS 26.7 only; earlier versions were not checked.
 
 <ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/macos-requirements/" source="Box docs">macOS requirements</ReadMore>
 
@@ -169,6 +129,7 @@ claude --version
 <Expect title="What you should see (inferred, not run for this workshop)">
 
 ```text
+# version at the time of writing
 2.1.331 (Claude Code)
 ```
 
@@ -182,7 +143,7 @@ The pack copies parts of your own Claude Code set-up into the box's storage at t
 
 ## Node 22, for the local MCP server in Part 5
 
-Part 5 runs a small MCP server inside the box, the local exec proxy. It is a Node program. The profile names the Node installation by its full path, because inside the box the agent's `PATH` does not include your Node. This workshop uses Node 22.23.4 installed with mise, a tool version manager; any other installation works if you change the path in the profile (not checked).
+Part 5 runs a small MCP server inside the box, the local exec proxy. It is a Node program. The profile names the Node installation by its full path, because inside the box the agent's `PATH` does not include your Node. This workshop uses Node 22.23.4 installed with [mise, a tool version manager](https://mise.jdx.dev/getting-started.html); any other installation should work if you change the path in the profile.
 
 <Command what="Prints the folder of the Node 22 installation that mise manages.">
 
@@ -207,7 +168,7 @@ mise where node@22
 
 ## The exec proxy repository, for Part 5
 
-The local exec proxy lives in the public repository [so0k/box-exec-proxy](https://github.com/so0k/box-exec-proxy), in `proxy/`. The workshop assumes a copy at `$HOME/box-exec-proxy`. The Cloudflare API description the proxy searches, `spec/spec.json`, is not in the repository: the repository's script `tools/fetch-spec.sh` downloads it. The commands in this section were not run for this workshop.
+The local exec proxy lives in the public repository [so0k/box-exec-proxy](https://github.com/so0k/box-exec-proxy), in `proxy/`. The workshop assumes a copy at `$HOME/box-exec-proxy`. The Cloudflare API description the proxy searches, `spec/spec.json`, is not in the repository: the repository's script `tools/fetch-spec.sh` downloads it.
 
 <Command what="Downloads the exec proxy repository into your home folder.">
 
@@ -270,7 +231,7 @@ The workshop uses two tokens with nearly the same permissions:
 | The **MCP token** (`box-poc-mcp` in the worked example) | Cloudflare's remote MCP server, in the first five acts | Workers Scripts Write, Workers Tail Read, Workers Observability Read, Workers Observability Write, D1 Write, Workers KV Storage Write, Account Settings Read, **User Details Read** |
 | The **agent token** (`box-poc-agent`) | Direct calls to the Cloudflare API from inside the box, in the request-rules act | The same list without User Details Read |
 
-Both are restricted to the one account. In the worked example they expire on 2026-12-13.
+Both are restricted to the one account.
 
 ### Why the tokens are broad
 
@@ -279,8 +240,6 @@ Both tokens can do everything the security engineer wants to refuse: read the lo
 ### Why there are two
 
 Cloudflare's remote MCP server accepts a user token only if both `GET /user` and `GET /accounts` answer. `GET /user` needs User Details Read. The agent token lacks it, and the server refused that token when it connected (403 `insufficient_scope`, recorded in the author's measurement notes, not published). The MCP token adds User Details Read and leaves the agent token unchanged. Apart from that one permission the two match: whatever the vendor's server can do with the MCP token, the local exec proxy can do with the agent token.
-
-A third token exists in the worked example, a deploy token for the app's owner. The agent never gets it, and you do not need it.
 
 ### Check
 

@@ -1,7 +1,8 @@
 /*
  * Agent in a Box: site styles, on top of the Flexoki theme (starlight-theme-flexoki).
  * The theme owns colours and type sizes. This file sets the layout and the workshop components.
- * Red is used only for a refusal, never as decoration.
+ * Colour carries meaning, never decoration: red means refused or removed, green new, amber changed,
+ * sand a sandbox, magenta personal data, blue the path of an act. Text always names it too.
  */
 
 :root {
@@ -22,15 +23,60 @@
 	/* Diagram boxes: a raised surface, so they stand out from the page without a heavy outline. */
 	--aib-node-bg: var(--sl-color-gray-5);
 	--aib-node-line: var(--sl-color-gray-4);
+
+	/* Diagram roles, from the Flexoki palette. Strokes keep 3:1 or more against the page. */
+	--aib-new: var(--color-green-400);
+	--aib-changed: var(--color-yellow-300);
+	--aib-removed: var(--sl-color-red);
+	/* Flexoki has no tan: a muted yellow-brown, well below the amber in saturation. */
+	--aib-sand: #b09878;
+	--aib-personal: var(--color-magenta-400);
+	/* Text on a filled role pill; amber is light in both themes, so its text stays dark. */
+	--aib-on-role: var(--color-black);
+	--aib-on-changed: var(--color-black);
 }
 
 :root[data-theme='light'] {
+	--aib-new: var(--sl-color-green);
+	--aib-changed: var(--color-yellow-600);
+	--aib-sand: #8a7556;
+	--aib-personal: var(--color-magenta-600);
+	--aib-on-role: #fff;
 	--aib-refuse-bg: color-mix(in srgb, var(--sl-color-red) 8%, transparent);
 	--aib-permit-bg: color-mix(in srgb, var(--sl-color-accent) 7%, transparent);
 	--aib-panel-bg: var(--sl-color-gray-7);
 	--aib-line: var(--sl-color-gray-6);
 	--aib-node-bg: var(--sl-color-gray-6);
 	--aib-node-line: var(--sl-color-gray-5);
+}
+
+/*
+ * Side menu and "On this page" one small step below the body text (about 0.9 of it, never under 14px),
+ * instead of the theme's fixed 13 to 14px. Group labels a step above the links; the page outline
+ * never above the side menu. Narrow screens keep the theme's own sizes.
+ */
+@media (min-width: 50rem) {
+	:root {
+		--sl-sidebar-width: 20.5rem;
+		--aib-nav-text: max(0.875rem, calc(0.9 * var(--sl-flexoki-text-base)));
+		--aib-nav-group-text: max(0.9375rem, calc(0.95 * var(--sl-flexoki-text-base)));
+		--aib-toc-text: max(0.875rem, calc(0.875 * var(--sl-flexoki-text-base)));
+	}
+	.sidebar-content {
+		--sl-text-sm: var(--aib-nav-text);
+	}
+	.sidebar-content .large {
+		font-size: var(--aib-nav-group-text);
+	}
+	.right-sidebar-panel {
+		--sl-text-xs: var(--aib-toc-text);
+		--sl-text-sm: var(--aib-nav-group-text);
+	}
+}
+@media (min-width: 90rem) {
+	:root {
+		--sl-sidebar-width: 21.5rem;
+	}
 }
 
 /* Side menu hidden with the button in the header (wide screens only). */
