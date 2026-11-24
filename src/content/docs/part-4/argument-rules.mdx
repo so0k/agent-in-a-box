@@ -23,35 +23,53 @@ After the tool-allowlist act the agent may read the Workers and their deployment
 <CatchUp>
 
 ```toml title="$HOME/box-ws/profiles/ws/profile.toml"
-packs = ["@box/base"]
-policies = ["operate-tools.dw"]
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw", "operate-tools.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
 MCP_TIMEOUT = "300000"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.cloudflare]
 type = "http"
 destinations = ["mcp.cloudflare.com"]
 secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
+```
+
+```text title="$HOME/box-ws/profiles/ws/policy.dw"
+// Copied from @box/locked (Locked) by `box profile create`. This file is yours: only
+// `box profile create --force` replaces it. Edit the rules here, and the next run
+// uses them.
+
+// The box's shell runs none of its own commands, such as cd, cat, or echo, and the agent reaches
+// its project and what your packs and profile allow, such as the model and package registries. A
+// tool that a pack declares, such as git, still starts, because box writes its permit. The agent's
+// own file tools still work: your profile's filesystem lists decide what they reach.
+
+// Let programs read and write /dev/null, which they redirect output to all the time.
+@id("dev_null")
+permit (principal, action in [Box::Action::"fs:read", Box::Action::"fs:write"], resource)
+when { context.input.path == "/dev/null" };
+
+//
+// To let the shell run some commands, add a rule that names them. Agents run uname at startup to
+// identify the system, such as:
+//
+// @id("shell_commands")
+// permit (principal, action == Box::Action::"shell:exec", resource)
+// when { ["uname", "cd", "pwd", "ls", "cat", "grep", "head", "tail", "wc"].contains(context.input.program) };
 ```
 
 ```text title="$HOME/box-ws/profiles/ws/operate-tools.dw"
@@ -107,6 +125,7 @@ The pieces are those of the tool-allowlist act. What is new is the decision: the
   - profiles/
     - ws/
       - profile.toml you edit this
+      - policy.dw the starter, still first
       - no-remote-execute.dw no longer listed
       - operate-tools.dw the allow-list
       - **args.dw** the argument rule
@@ -137,9 +156,9 @@ unless { context.input.path has account_id && context.input.path.account_id == "
 
 Then list it in the profile, after the allow-list:
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml (first two lines)" ins={2}
-packs = ["@box/base"]
-policies = ["operate-tools.dw", "args.dw"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml (lines 4 and 5)" ins={2}
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw", "operate-tools.dw", "args.dw"]
 ```
 
 **The run.** `box profile show ws` passes and lists both files. It cannot check the new rule: a per-tool rule loads only once the catalog is staged. So run the Part 4 free check.
@@ -150,11 +169,11 @@ policies = ["operate-tools.dw", "args.dw"]
 ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key box run ws --no-banner -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-per-endpoint.json --tools ToolSearch --allowedTools mcp__cloudflare,ToolSearch --model claude-sonnet-5-5 --max-turns 1 -p "Say hello." --output-format stream-json --verbose < /dev/null > check.jsonl
 ```
 
-<Flag name="(every flag)">As in iteration 2 of [the tool-allowlist act](/part-4/tool-allowlist/): the invalid key for this one command, profile `ws`, Claude Code with no settings files, only the per-endpoint server, `ToolSearch` as the one built-in tool, one turn, the event stream to `check.jsonl`.</Flag>
+<Flag name="(every flag)">As in iteration 3 of [the tool-allowlist act](/part-4/tool-allowlist/): the invalid key for this one command, profile `ws`, Claude Code with no settings files, only the per-endpoint server, `ToolSearch` as the one built-in tool, one turn, the event stream to `check.jsonl`.</Flag>
 
 </Command>
 
-**What we see.** After about a minute the server is connected with 3,053 tools, and the terminal shows **no** per-tool warning: the rule loaded when the catalog was staged. In the two checks made for this page the hand-over took 64.0 and 70.8 seconds, and the run 67 and 75 seconds.
+**What we see.** After about a minute the server is connected with 3,053 tools, and the terminal shows **no** per-tool warning: the rule loaded when the catalog was staged. In the check measured on 2026-11-24 with the fork build, the hand-over took 64 seconds and the run 66.2 seconds.
 
 <Expect variant="permit">
 
@@ -191,16 +210,18 @@ box run ws -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-p
 
 </Command>
 
+Interactive mode was not run for this workshop.
+
 </TabItem>
 <TabItem label="Headless">
 
 <Command what="Runs the sentence in the box and writes Claude Code's event stream to a file.">
 
 ```sh
-box run ws --no-banner -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-per-endpoint.json --tools ToolSearch --allowedTools mcp__cloudflare,ToolSearch --model claude-sonnet-5-5 --max-turns 12 --max-budget-usd 0.25 -p "Using only the workers_deployments_list tool of the cloudflare MCP server, list the deployments of the Worker box-poc-workshop first on account fedcba9876543210fedcba9876543210 and then on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > argument-rules.jsonl
+box run ws --no-banner -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-per-endpoint.json --tools ToolSearch --allowedTools mcp__cloudflare,ToolSearch --model claude-sonnet-5-5 --max-turns 12 --max-budget-usd 0.40 -p "Using only the workers_deployments_list tool of the cloudflare MCP server, list the deployments of the Worker box-poc-workshop first on account fedcba9876543210fedcba9876543210 and then on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > argument-rules.jsonl
 ```
 
-<Flag name="--max-budget-usd 0.25">The money cap. The measured run cost $0.2354, close to it.</Flag>
+<Flag name="--max-budget-usd 0.40">The money cap. The runs measured for this workshop used 0.25: they cost USD 0.2201 to 0.2537, because of the tool names, and the logs run went over 0.25, so Claude Code ended it with `error_max_budget_usd` and reported no result. 0.40 leaves room for one more turn. Runs with 0.40 were not made for this workshop.</Flag>
 <Flag name="(the rest)">As in the headless run of [the tool-allowlist act](/part-4/tool-allowlist/).</Flag>
 
 </Command>
@@ -210,23 +231,22 @@ box run ws --no-banner -- --setting-sources "" --strict-mcp-config --mcp-config 
 
 <Prompt label="Two accounts, one tool">Using only the workers_deployments_list tool of the cloudflare MCP server, list the deployments of the Worker box-poc-workshop first on account fedcba9876543210fedcba9876543210 and then on account 0123456789abcdef0123456789abcdef.</Prompt>
 
-This sentence was run twice as a paid verification run on the workshop's build, with your file as this page builds it: 4 turns and about USD 0.22 each, as Claude Code reported them. Only turns and cost were recorded for those runs. The run whose decisions and tokens are shown below used a sentence that was not recorded; its calls had this shape: one `workers_deployments_list` call with `account_id` `fedcba9876543210fedcba9876543210`, then one with `0123456789abcdef0123456789abcdef`, both with `script_name` `box-poc-workshop`.
+The measured run typed this sentence as shown, with the workshop's real account id in place of the stand-in. Its calls: one `workers_deployments_list` call with `account_id` `fedcba9876543210fedcba9876543210`, then one with `0123456789abcdef0123456789abcdef`, both with `script_name` `box-poc-workshop`.
 
 ## What you see
 
 ### Box's decisions
 
-`box runs history <box ID>` for the measured run on the workshop's build (time and reason columns, `net:connect` rows and the gateway's `http:request` rows left out). The measured run used the kit's version of this rule, the same `forbid ... unless` under the id `logstoolsargs_deployments_poc_account`.
-
-Below, the RULE column shows your rule's id in place of the kit's. The last verification run for this site used your file on the workshop's build and showed the same two decisions: the other account refused by `this_account_only`, then the workshop's account permitted.
+`box runs history <box ID>` for the run measured on 2026-11-24 with the fork build and your file (time column, `net:connect` rows and the gateway's `http:request` rows left out).
 
 <Expect variant="refuse" title="What you should see: one refused, one permitted">
 
 ```text
-permit  mcp:call                  cloudflare/resources/list            mcp_cloudflare_call
-permit  mcp:call                  cloudflare/tools/list                mcp_cloudflare_call
-deny    workers_deployments_list  cloudflare/workers_deployments_list  this_account_only
-permit  mcp:call                  cloudflare/workers_deployments_list  mcp_cloudflare_call
+installed  policy                    policy.dw                            -
+permit     mcp:call                  cloudflare/tools/list                mcp_cloudflare_call
+permit     mcp:call                  cloudflare/resources/list            mcp_cloudflare_call
+deny       workers_deployments_list  cloudflare/workers_deployments_list  this_account_only  a forbid rule matched
+permit     mcp:call                  cloudflare/workers_deployments_list  mcp_cloudflare_call
 ```
 
 </Expect>
@@ -235,17 +255,15 @@ The refusal is a per-tool decision: the ACTION column holds the tool's name and 
 
 ### What the agent received
 
-The shape of the refusal was measured with the kit's rule.
+The refusal as the model received it (measured):
 
-The text below is the same refusal with your rule's id and description. The last verification run for this site, with your file, received this text.
-
-```text title="The refusal, as the model sees it (your rule)"
+```text title="The refusal, as the model saw it"
 per-tool gate (cloudflare::Action::"workers_deployments_list"): policy denied this operation on 'cloudflare/workers_deployments_list' [policy: this_account_only]: The agent operates the workshop progress tracker on its own account, 0123456789abcdef0123456789abcdef, and nowhere else.
 ```
 
 ### The answer, in outline
 
-The agent said it could list the deployments on only one of the two accounts. For `fedcba9876543210fedcba9876543210`: denied by the argument rule (in your file, `this_account_only`), which allows the tool only on the workshop's account; it did not try to work around it, and said the policy would have to change. For the workshop's account: four deployments of `box-poc-workshop`, the newest (2026-11-14 14:17 UTC) serving all traffic, each sending 100 percent to one version, all made with wrangler by the same author, whose email address (`<redacted>`) the answer printed.
+The agent said it could list the deployments on only one of the two accounts. For `fedcba9876543210fedcba9876543210`: denied by `this_account_only`, which allows the tool only on the workshop's account; it did not try another route, and said the policy would have to change on your side. For the workshop's account: 5 deployments of `box-poc-workshop`, the newest (2026-11-24 05:09:57 UTC) serving all traffic, each sending 100 percent to one version, all made with wrangler by "the same author". The answer did not print the author's email address this time; it is in the tool result the agent received.
 
 ## The two seats
 
@@ -253,14 +271,14 @@ The agent said it could list the deployments on only one of the two accounts. Fo
 The policy now decides on what a tool is called with, not just its name: the same tool is permitted for the workshop's account and refused for any other, and the records name the rule. If the rule had failed to load, every call to the tool would have been refused. What the rule cannot do is look at the answer: the permitted deployments list carried the deployer's email address, and it reached the agent.
 </Seat>
 <Seat who="developer">
-For the right account nothing changed: the call ran and the answer was complete. For the wrong account the agent got a clear refusal naming the rule. The run cost $0.2354 and took 85 seconds, most of it the catalog wait, the same as any per-endpoint run.
+For the right account nothing changed: the call ran and the answer was complete. For the wrong account the agent got a clear refusal naming the rule. The run cost $0.2326 and took 78.4 seconds, most of it the catalog wait, the same as any per-endpoint run.
 </Seat>
 
 **The takeaway:** a rule on a typed argument narrows an allowed tool to one account with one line, and refuses when it cannot decide, but it decides the request, never the data that comes back.
 
-<Measure act="argument-rules" task="two accounts, one tool" turns={4} tokens="320,678 in, 1,157 out" cost="$0.2354" wall="85 s" build="pkg-fix" />
+<Measure act="argument-rules" task="two accounts, one tool" turns={4} tokens="328,788 in, 1,136 out" cost="$0.2326" wall="78.4 s" build="fork 535307a (Claude Code 2.1.331, 2026-11-24)" />
 
-One run, headless, on the workshop's build (`pkg-fix`), with the kit's allow-list (the same six tools under another id) and this argument rule. Claude Code's own time was 18.0 seconds of the 85. See [Builds and gaps](/results/builds-and-gaps/).
+One run, headless, on 2026-11-24, with the fork build at commit 535307a and Claude Code 2.1.331, with `--max-budget-usd 0.25`. Input tokens count uncached, cache-write and cache-read tokens together. About 3,500 of them are the pack's system prompt ([Inside the pack](/part-2/inside-the-pack/)). Claude Code's own time was 13.8 seconds of the 78.4; most of the rest is the staging wait. See [Builds and gaps](/results/builds-and-gaps/).
 
 ## Clean up
 

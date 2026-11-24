@@ -3,12 +3,13 @@ title: "MCP through the broker"
 description: "How Box sees MCP: the broker, the mcp:call decision, the records of a run and how to read them with the box CLI."
 sidebar:
   label: "MCP through the broker"
-  order: 4
+  order: 5
   badge:
     text: "Hands-on"
     class: "aib-badge aib-badge-handson"
 ---
 
+import { Aside, FileTree } from '@astrojs/starlight/components';
 import { PartProgress, Pieces, CatchUp, Iteration, Command, Flag, Why, ReadMore, Expect, Seat } from '~/components';
 
 <PartProgress current="part-2/mcp-through-the-broker" />
@@ -18,28 +19,47 @@ After this page you will know how an MCP server reaches an agent in a box, what 
 <CatchUp>
 
 ```toml title="$HOME/box-ws/profiles/ws/profile.toml"
-packs = ["@box/base"]
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
+```
 
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
+```text title="$HOME/box-ws/profiles/ws/policy.dw"
+// Copied from @box/locked (Locked) by `box profile create`. This file is yours: only
+// `box profile create --force` replaces it. Edit the rules here, and the next run
+// uses them.
+
+// The box's shell runs none of its own commands, such as cd, cat, or echo, and the agent reaches
+// its project and what your packs and profile allow, such as the model and package registries. A
+// tool that a pack declares, such as git, still starts, because box writes its permit. The agent's
+// own file tools still work: your profile's filesystem lists decide what they reach.
+
+// Let programs read and write /dev/null, which they redirect output to all the time.
+@id("dev_null")
+permit (principal, action in [Box::Action::"fs:read", Box::Action::"fs:write"], resource)
+when { context.input.path == "/dev/null" };
+
+//
+// To let the shell run some commands, add a rule that names them. Agents run uname at startup to
+// identify the system, such as:
+//
+// @id("shell_commands")
+// permit (principal, action == Box::Action::"shell:exec", resource)
+// when { ["uname", "cd", "pwd", "ls", "cat", "grep", "head", "tail", "wc"].contains(context.input.program) };
 ```
 
 ```json title="$HOME/leaderboard-ops/cloudflare-code-mode.json"
@@ -58,7 +78,7 @@ secret.phantom_prefix = "sk-ant-"
 
 <Pieces stage={3} />
 
-Three pieces are new in the picture: the **MCP broker**, the **policy engine** with its policy files, and the **records**. The policy engine has been deciding since the first run on the previous page (every `deny net:connect` was its answer); it gets its own piece now because, from here on, its rules are what the story is about.
+Three pieces are new in the picture: the **MCP broker**, the **policy engine** with its policy files, and the **records**. The policy engine has been deciding since the first run on the previous page (the refused Datadog host was its answer); it gets its own piece now because, from here on, its rules are what the story is about.
 
 ## Two ways an MCP server reaches a boxed agent
 
@@ -155,6 +175,10 @@ box runs history <the BOX ID box run printed>
 
 <Iteration n={1} title="Claude Code knows the server, Box does not">
 
+<Aside type="note" title="Not run for this workshop">
+Measured earlier with the hand-written profile, on an earlier local build; not run again for this workshop.
+</Aside>
+
 **The run.** The check, with the profile from the last page.
 
 **What we see.** In the init line, and in the history:
@@ -177,36 +201,47 @@ Claude Code tried to connect and received 0 tools from the server. The gateway r
 
 <Iteration n={2} title="Declare the server, without its credential">
 
+<Aside type="note" title="Not run for this workshop">
+Measured earlier with the hand-written profile, on an earlier local build; not run again for this workshop.
+</Aside>
+
 **What we add.** An `[mcp.cloudflare]` table.
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={24-26}
-packs = ["@box/base"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={19-21}
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.cloudflare]
 type = "http"
 destinations = ["mcp.cloudflare.com"]
 ```
+
+<FileTree>
+
+- box-ws/
+  - profiles/
+    - ws/
+      - **profile.toml** one table added: mcp.cloudflare
+      - policy.dw
+- leaderboard-ops/ the workspace
+  - cloudflare-code-mode.json
+
+</FileTree>
 
 - `[mcp.cloudflare]` declares an MCP server named `cloudflare`. Use the same name as in Claude Code's file: it becomes the `server` field of every decision.
 - `type = "http"` says it is a remote server. The other type is `"stdio"`, for a local program (Part 5).
@@ -224,7 +259,7 @@ permit  mcp:call      cloudflare/initialize        mcp_cloudflare_call
 
 </Expect>
 
-Box let the request through, and read it as MCP: `cloudflare/initialize` is the first MCP message, the handshake. This time Cloudflare refused it. The agent has no `CLOUDFLARE_MCP_TOKEN` (it inherits nothing from your shell), so Claude Code filled in an empty value and sent `Bearer ` and nothing.
+Box let the request through, and read it as MCP: `cloudflare/initialize` is the first MCP message, the handshake. This time Cloudflare refused it. The agent has no `CLOUDFLARE_MCP_TOKEN` (Box passes no token from your shell to the agent), so Claude Code filled in an empty value and sent `Bearer ` and nothing.
 
 <Why title="Why an [mcp] table, not a route">
 A route, `[egress.cloudflare-mcp]`, would open the host and nothing more: Box would decide connections and HTTP requests, and never see a tool call. The `[mcp.cloudflare]` table makes Box **identify** the server. Every MCP request becomes an `mcp:call` with the server, the method and the tool, and Box reads the server's `tools/list` to type each tool for later rules.
@@ -240,29 +275,24 @@ Declare the server only in Claude Code's file. Its traffic would still go throug
 
 **What we add.** One line in the `[mcp.cloudflare]` table.
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={27}
-packs = ["@box/base"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={22}
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.cloudflare]
 type = "http"
@@ -274,7 +304,7 @@ secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
 
 The stand-in reaches Claude Code's `${CLOUDFLARE_MCP_TOKEN}`. The same JSON file now works with the real token outside the box (the token-scope act) and with a stand-in inside it.
 
-**The run.** The same check. **What we see:**
+**The run.** The same check. **What we see** (measured on Box 0.3.0, 2026-11-24; the first row, `installed policy`, and the Anthropic rows are left out):
 
 <Expect variant="permit">
 
@@ -332,7 +362,7 @@ type = "http"
 ref = "env://CLOUDFLARE_MCP_TOKEN"
 ```
 
-In the `# policy.dw` part, the first five rules are the ones your tables generated (each is one line in the output):
+In the `# policy.dw` part, after the starter text of `policy.dw` come the generated rules. The first five come from `@box/anthropic` and from your `[mcp.cloudflare]` table (each is one line in the output; copied on Box 0.3.0, 2026-11-24):
 
 ```text title="Part of box profile show ws --full"
 @id("route_anthropic_connect") permit (principal, action == Box::Action::"net:connect", resource) when { (context.input.host == "api.anthropic.com" && context.input.port == 443) };
@@ -342,9 +372,9 @@ In the `# policy.dw` part, the first five rules are the ones your tables generat
 @id("mcp_cloudflare_request") permit (principal, action == Box::Action::"http:request", resource) when { context.input.host == "mcp.cloudflare.com" };
 ```
 
-After them come rules for the storage folders (`storage_0_read` and so on), project access (`project_read`), and `forbid` rules that keep every process away from Box's own folders (`box_home_*`, `resources_*`, `protected_*`, `project_configuration_*`).
+Before them is the starter's text with its one rule, `dev_null`, which lets programs read and write `/dev/null`. After them come rules for the storage folders (`storage_0_read` and so on), project access (`project_read`), and `forbid` rules that keep every process away from Box's own folders (`box_home_*`, `resources_*`, `protected_*`, `project_configuration_*`).
 
-Read `mcp_cloudflare_call` once more. Its only condition is the server's name. It permits **every method and every tool** of the server, `execute` included. That is the rule the opaque-execute act runs on: you write no policy of your own for it. Part 3 explains how to read a rule like this one, and how to narrow it.
+Read `mcp_cloudflare_call` once more. Its only condition is the server's name. It permits **every method and every tool** of the server, `execute` included. That is the rule the opaque-execute act runs on: you write no rule of your own for it. Part 3 explains how to read a rule like this one, and how to narrow it.
 
 </Iteration>
 
@@ -357,7 +387,7 @@ Each run has a folder, `$BOX_HOME/r/<box ID>/`. After the checks above it holds:
 
 ```text title="$HOME/box-ws/r/b-<16 hex>/"
 box.toml        the configuration Box Core ran with
-policy.dw       the rules it ran with (your files first, when you have some, then the generated ones)
+policy.dw       the rules it ran with (your files first, starting with the starter policy.dw, then the generated ones)
 profile-name    the profile's name, the only place a run records it
 records.jsonl   the run's records
 box/            Box Core's state: the aliases, the socket, the certificate authority, and the decision history
@@ -375,6 +405,10 @@ Neither holds an MCP tool call's arguments or its output by default. A profile c
 The acts are best watched with two terminal panes: Claude Code in the first, Box's decisions in the second. The box CLI has no command that follows decisions live (no `--follow`; a gap, listed in [Builds and gaps](/results/builds-and-gaps/)). Here is the plainest thing it gives.
 
 ### Pane 1: the activity banner
+
+<Aside type="note" title="Not run for this workshop">
+Interactive mode was not run for this workshop. The banner lines below were measured earlier with the hand-written profile, on an earlier local build; not run again for this workshop.
+</Aside>
 
 Run interactive acts **without** `--no-banner`. Box draws one line under Claude Code, measured in this workshop's research:
 
@@ -394,13 +428,15 @@ and, on a refusal, for example:
 
 Open a second terminal. It does not share the first one's variables, so set the two that `box` needs again:
 
-<Command what="Puts the workshop's box build first on the PATH of this pane.">
+<Command what="Puts Box 0.3.0 first on the PATH of this pane.">
 
 ```sh
-export PATH="$HOME/box-build:$PATH"
+export PATH="$HOME/box-0.3.0:$PATH"
 ```
 
 </Command>
+
+In Part 4, use `$HOME/box-build` here instead ([the tool-allowlist act](/part-4/tool-allowlist/) switches to the fork build).
 
 <Command what="Points this pane at the workshop's Box home.">
 

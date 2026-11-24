@@ -1,9 +1,9 @@
 ---
 title: "opaque-execute: the vendor's server in a box"
-description: "The vendor's server through the box with execute permitted. The logs still come back, and Box sees only a tool call."
+description: "The vendor's server through the box with execute permitted. The logs query still runs, and Box sees only a tool call."
 sidebar:
   label: "opaque-execute"
-  order: 5
+  order: 6
   badge:
     text: "Act"
     class: "aib-badge aib-badge-act"
@@ -21,33 +21,52 @@ In the token-scope act, Claude Code used Cloudflare's MCP server with the real t
 <CatchUp>
 
 ```toml title="$HOME/box-ws/profiles/ws/profile.toml"
-packs = ["@box/base"]
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.cloudflare]
 type = "http"
 destinations = ["mcp.cloudflare.com"]
 secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
+```
+
+```text title="$HOME/box-ws/profiles/ws/policy.dw"
+// Copied from @box/locked (Locked) by `box profile create`. This file is yours: only
+// `box profile create --force` replaces it. Edit the rules here, and the next run
+// uses them.
+
+// The box's shell runs none of its own commands, such as cd, cat, or echo, and the agent reaches
+// its project and what your packs and profile allow, such as the model and package registries. A
+// tool that a pack declares, such as git, still starts, because box writes its permit. The agent's
+// own file tools still work: your profile's filesystem lists decide what they reach.
+
+// Let programs read and write /dev/null, which they redirect output to all the time.
+@id("dev_null")
+permit (principal, action in [Box::Action::"fs:read", Box::Action::"fs:write"], resource)
+when { context.input.path == "/dev/null" };
+
+//
+// To let the shell run some commands, add a rule that names them. Agents run uname at startup to
+// identify the system, such as:
+//
+// @id("shell_commands")
+// permit (principal, action == Box::Action::"shell:exec", resource)
+// when { ["uname", "cd", "pwd", "ls", "cat", "grep", "head", "tail", "wc"].contains(context.input.program) };
 ```
 
 ```json title="$HOME/leaderboard-ops/cloudflare-code-mode.json"
@@ -62,7 +81,7 @@ secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
 }
 ```
 
-No policy file of your own. The rule that decides this act is the one Box generated from `[mcp.cloudflare]`:
+No policy file of your own besides the starter `policy.dw`, which permits only `/dev/null`. The rule that decides this act is the one Box generated from `[mcp.cloudflare]`:
 
 ```text title="Generated, from box profile show ws --full"
 @id("mcp_cloudflare_call") permit (principal, action == Box::Action::"mcp:call", resource) when { context.input.server == "cloudflare" };
@@ -104,6 +123,10 @@ box run ws -- --bare --strict-mcp-config --mcp-config cloudflare-code-mode.json 
 
 </Command>
 
+<Aside type="note" title="Not run for this workshop">
+Interactive mode was not run for this workshop. The first-run screens below were measured earlier with the hand-written profile, on an earlier local build. With your own `~/.claude.json`, the pack may carry your onboarding answers into the box, so you may see fewer screens (inferred, not checked).
+</Aside>
+
 On the first interactive run in this profile, Claude Code asks the same four first-run questions as in the token-scope act, in the same order:
 
 | Screen | What it is | Answer |
@@ -141,10 +164,11 @@ The file holds what the tools returned, which for the logs task means log lines 
 <Command what="Deletes this act's output files.">
 
 ```sh
-rm -f act-b1-*.jsonl
+rm -f opaque-execute-logs.jsonl opaque-execute-allowed.jsonl check.jsonl
 ```
 
 <Flag name="-f">No question, and no error if a file is missing.</Flag>
+<Flag name="(the files)">The two task streams and the free check's stream from [MCP through the broker](/part-2/mcp-through-the-broker/), named one by one so no other act's file goes with them.</Flag>
 
 </Command>
 
@@ -165,20 +189,21 @@ The second is what the security engineer's constraints forbid: the Worker's logs
 
 **The agent's answers.** Both tasks are done.
 
-- Allowed task: one `execute` call, and a list of the account's Workers with a summary of the current deployment of `box-poc-workshop`.
-- Logs task: `docs` once, `search` three times to find the log query in Cloudflare's API description, `execute` twice, and a report of the Worker's log events for the last hour. In the measured run that hour held request lines and no email address. Nothing in the box would have stopped one.
+- Allowed task: one `execute` call. The account has one Worker, `box-poc-workshop`; its current deployment is of 2026-11-24 05:09 UTC, and it has 5 deployments in all.
+- Logs task: `search` twice to find the log query in Cloudflare's API description, `execute` twice, and no `docs`. The query ran, for about 10:28 to 11:26 UTC, and that hour held 0 events. Nothing in the box would have stopped log lines.
 
-**Box's decisions** for the logs task. These rows are built from the measured run (the build marked `pkg` below): the calls and their order are measured, and the RULE column shows the rule that decides them in your profile, `mcp_cloudflare_call`, the only permit for the server. They use the row format of `box runs history`, and are not a copy of a terminal. Rows for the handshake (`resources/list`, `tools/list`) and the `net:connect`, `http:request` and Anthropic rows are left out:
+**Box's decisions** for the logs task, measured on Box 0.3.0, 2026-11-24. The first row of every history is `installed policy policy.dw`. The time column and the `net:connect` and `http:request` rows are left out:
 
 <Expect variant="permit" title="What you should see: every call permitted">
 
 ```text
-permit  mcp:call  cloudflare/docs      mcp_cloudflare_call
-permit  mcp:call  cloudflare/search    mcp_cloudflare_call
-permit  mcp:call  cloudflare/search    mcp_cloudflare_call
-permit  mcp:call  cloudflare/search    mcp_cloudflare_call
-permit  mcp:call  cloudflare/execute   mcp_cloudflare_call
-permit  mcp:call  cloudflare/execute   mcp_cloudflare_call
+installed  policy    policy.dw                  -
+permit     mcp:call  cloudflare/tools/list      mcp_cloudflare_call
+permit     mcp:call  cloudflare/resources/list  mcp_cloudflare_call
+permit     mcp:call  cloudflare/search          mcp_cloudflare_call
+permit     mcp:call  cloudflare/search          mcp_cloudflare_call
+permit     mcp:call  cloudflare/execute         mcp_cloudflare_call
+permit     mcp:call  cloudflare/execute         mcp_cloudflare_call
 ```
 
 </Expect>
@@ -200,15 +225,15 @@ The two tasks look the same to the policy. One permitted call to a tool named `e
 The policy saw one `mcp:call` per tool call, with the server and the tool's name, and nothing else. The script, the API path it called and the account it read are all invisible, so no rule you could write on this traffic can tell the allowed task from the logs task. The records prove that a tool named `execute` ran, not what it read. The token was never in the agent's hands, which is real progress; but Cloudflare's server used it with full rights on your behalf.
 </Seat>
 <Seat who="developer">
-Nothing got in the way: both tasks finished, with the same tools and the same JSON file as the token-scope act. In the box 0.1.8 runs (one run each), the allowed task cost 0.0160 USD without a box and 0.0114 USD in one, and the logs task 0.0318 and 0.0845 USD; with one run per cell, the difference is not put down to the box. The cost of the box so far is one extra Yes on the key question per interactive run.
+Nothing got in the way: both tasks finished, with the same tools and the same JSON file as the token-scope act. In the runs of 2026-11-24 (one run each), the allowed task cost 0.0187 USD without a box and 0.0229 USD in one, and the logs task 0.0756 and 0.0332 USD; with one run per cell, the difference in turns is not put down to the box. About 3,500 input tokens of every boxed run are the pack's system prompt ([Inside the pack](/part-2/inside-the-pack/)). Beyond those tokens, the cost of the box so far is one extra Yes on the key question per interactive run.
 </Seat>
 
-**The takeaway:** a box that only recognises the server permits everything the server does out of its sight, so the logs still come back.
+**The takeaway:** a box that only recognises the server permits everything the server does out of its sight, so the logs query still runs; in the measured hour it simply found no log lines.
 
-<Measure act="opaque-execute" task="logs (last hour)" turns={7} tokens="100,197 in, 1,372 out" cost="$0.0778" wall="22 s" build="pkg (Claude Code 2.1.330)" />
-<Measure act="opaque-execute" task="allowed" turns={2} tokens="3,954 in, 781 out" cost="$0.0114" wall="9 s" build="installed box 0.1.8 (Claude Code 2.1.325)" />
+<Measure act="opaque-execute" task="logs (last hour)" turns={5} tokens="42,746 in, 1,041 out" cost="$0.0332" wall="16.2 s" build="Box 0.3.0 (Claude Code 2.1.331, 2026-11-24)" />
+<Measure act="opaque-execute" task="allowed" turns={2} tokens="9,900 in, 816 out" cost="$0.0229" wall="10.4 s" build="Box 0.3.0 (Claude Code 2.1.331, 2026-11-24)" />
 
-The logs task was measured on `pkg`, an earlier local build of the CLI, not the workshop's `pkg-fix`; the allowed task only on the installed box 0.1.8. On the workshop's build (`pkg-fix`) the logs task was run once more as a paid verification run, typed as this page shows it: 5 turns, USD 0.0354 as Claude Code reported it. Only its turns and cost were recorded, so the numbers above stay those of the `pkg` run. The allowed task was not run as a paid run on `pkg-fix`. Input tokens include cache writes and reads; details in [Measurements](/results/measurements/).
+One run each, headless, on 2026-11-24, with Box 0.3.0 and Claude Code 2.1.331. Input tokens count uncached, cache-write and cache-read tokens together. About 3,500 of them are the pack's system prompt ([Inside the pack](/part-2/inside-the-pack/)). Details in [Measurements](/results/measurements/).
 
 ## Clean up
 
@@ -217,16 +242,17 @@ Two places hold what the agent read: the stream files in your workspace, and the
 <Command what="Deletes this act's stream files.">
 
 ```sh
-rm -f act-b1-*.jsonl
+rm -f opaque-execute-logs.jsonl opaque-execute-allowed.jsonl check.jsonl
 ```
 
 <Flag name="-f">No question, and no error if a file is missing.</Flag>
+<Flag name="(the files)">The two task streams and the free check's stream from [MCP through the broker](/part-2/mcp-through-the-broker/), named one by one so no other act's file goes with them.</Flag>
 
 </Command>
 
 ### The transcripts in storage
 
-Claude Code saves a full transcript of every run, one `.jsonl` file per session, in its configuration folder. In this profile that folder is the storage folder `config` (`CLAUDE_CONFIG_DIR` points there), so the transcripts land in `$BOX_HOME/storage/ws/default/agent/config/projects/`, in a subfolder named after the workspace's full path, with each `/` turned into `-`. (The naming is inferred from one folder seen in a test home.)
+Claude Code saves a full transcript of every run, one `.jsonl` file per session, in its configuration folder. In this profile that folder is the storage folder `config` (the Claude Code pack points `CLAUDE_CONFIG_DIR` there), so the transcripts land in `$BOX_HOME/storage/ws/default/agent/config/projects/`, in a subfolder named after the workspace's full path, with each `/` turned into `-`. (The naming is inferred from one folder seen in a test home.)
 
 After this act's runs, the storage part of your Box home holds the new transcripts:
 
@@ -236,6 +262,7 @@ After this act's runs, the storage part of your Box home holds the new transcrip
   - profiles/
     - ws/
       - profile.toml you edit this
+      - policy.dw the starter policy
   - storage/
     - ws/
       - default/
@@ -251,7 +278,7 @@ After this act's runs, the storage part of your Box home holds the new transcrip
 
 </FileTree>
 
-They hold the same tool results as the stream files: the log lines, and the deployer's email address. In a check after this workshop's verification runs, that address was in three transcript files there. Deleting the stream files does not touch them. Storage is kept between runs, so the transcripts outlive the run, and every later run of the profile adds more. Storage is also shared by every folder you run the profile in, so this one folder holds the transcripts of all of them.
+They hold the same tool results as the stream files: the log lines, and the deployer's email address. In a check after the runs of an earlier version of this workshop, that address was in three transcript files there. Deleting the stream files does not touch them. Storage is kept between runs, so the transcripts outlive the run, and every later run of the profile adds more. Storage is also shared by every folder you run the profile in, so this one folder holds the transcripts of all of them.
 
 <Command what="Lists the transcript folders and files Claude Code kept in the profile's storage. It changes nothing.">
 
@@ -276,11 +303,11 @@ rm -r "$BOX_HOME/storage/ws/default/agent/config/projects"
 
 Claude Code makes the folder again on its next run (inferred, not checked).
 
-The box CLI has a command near this, `box profile reset ws`. It deletes the profile's whole storage: the transcripts, and also Claude Code's settings, the first-run answers (theme, notes, folder trust) and the `tmp` folder. The profile and its boxes stay, and the next interactive run asks the first-run questions again (source: `box profile reset --help`; that storage keeps the first-run answers was measured for this workshop). It has no option for the transcripts alone, so the acts use `rm -r` on the one folder (a gap, listed in [Builds and gaps](/results/builds-and-gaps/)). At the end of the workshop, the reset is the way to remove everything the agent kept.
+The box CLI has a command near this, `box profile reset ws`. It deletes the profile's whole storage: the transcripts, and also Claude Code's settings, the first-run answers (theme, notes, folder trust) and the `tmp` folder. The profile and its boxes stay, and the next interactive run asks the first-run questions again (source: `box profile reset --help`; that storage keeps the first-run answers was measured earlier with the hand-written profile). It has no option for the transcripts alone, so the acts use `rm -r` on the one folder (a gap, listed in [Builds and gaps](/results/builds-and-gaps/)). At the end of the workshop, the reset is the way to remove everything the agent kept.
 
-<Aside type="note" title="Not run for this site">
+<Aside type="note" title="Not run for this workshop">
 
-The command below is shown from its help text. It was not run while this site was written.
+The command below is shown from its help text. Not run for this workshop.
 
 </Aside>
 

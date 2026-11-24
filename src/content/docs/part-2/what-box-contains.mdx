@@ -35,15 +35,18 @@ The agent can never reach the trusted process's files. Box always refuses a requ
 
 On the agent's own system calls the operating system enforces the grants of the run: only the paths the profile grants, plus a runtime minimum Box adds (system libraries, `/dev/null` and the like), exist for the agent. Everything else gives `operation not permitted`.
 
-You will see this on the next page. The first time Claude Code runs in a box, Box prints a startup report like this one (measured on this build, abridged):
+You will see this on the next page. The first time Claude Code runs in a box, Box prints a startup report like this one (measured on 2026-11-24 with Box 0.3.0, abridged):
 
 ```text title="Box's startup report, first run of a profile"
-strands-box: [agent] runs ~/.local/share/claude/versions/2.1.330 with no policy decision over these paths:
-  (no filesystem entry)
-  exec        ~/.local/share/claude/versions/2.1.330  (command, implicit)
+strands-box: [agent] runs ~/.local/share/claude/versions/2.1.331 with no policy decision over these paths:
+  read        ~/leaderboard-ops  (read-only)
+  read        ~/.local/share/claude/versions/2.1.331  (read-only)
+  read        ~/box-ws/storage/ws/default/agent/config  (read-write)
+  ...
+  exec        ~/.local/share/claude/versions/2.1.331
+  exec        /usr/bin/plutil
 strands-box: [agent] runtime minimum, added by Core:
   read        /usr/share/icu ... /System/Library ... /dev/null ...
-  enter       ~/leaderboard-ops  (workspace, entry only)
 ```
 
 Two details matter for the story. First, such a refusal is the sandbox's, not the policy's: an `operation not permitted` from the sandbox leaves no row in the run's history. Second, Box's own shell and Python ask the policy for each file operation, but the agent's own file tools, and tools such as `git`, open files through their grants only; the policy never sees those.
@@ -58,7 +61,7 @@ The gateway has no allow-list of its own. Every yes comes from the policy, and w
 
 A profile binds a credential to destinations. The real value stays in the trusted process. The agent, and every tool and MCP server in the box, gets a **stand-in** in the same variable: a prefix plus 64 random hex characters (the prefix is `strands_box_` unless the profile sets one, such as `sk-ant-` for the Anthropic key). On a permitted request to the bound destination, the gateway replaces the stand-in with the real value.
 
-Measured on this build, with dummy real values, the agent's environment held:
+Measured earlier on a local build, with dummy real values (not run again for this workshop), the agent's environment held:
 
 ```text title="What the agent sees in its environment"
 ANTHROPIC_API_KEY=sk-ant-<64 hex>
@@ -97,7 +100,7 @@ Core's own documentation also calls its program `box` (a Core binary in a downlo
 
 As Box's design notes describe it: on macOS the operating-system sandbox is **Seatbelt**. For each process Box builds a Seatbelt profile from that process's settings, then starts a small launcher, `strands-box-contain-trampoline`. The trampoline applies the profile with `sandbox_init()` and then becomes the target program, so every child process inherits the same sandbox. If applying the profile fails, Box refuses to start the program: it fails closed.
 
-The trampoline ships beside `box` in the workshop's build. One effect seen on this machine: a project under `/tmp` (`/private/tmp`) failed containment with `grant is too broad to be authorized`, which is why the workshop's folders live in your home. Which file under `/private/tmp` triggers it was not found out.
+The trampoline ships beside `box` in the release archive. One effect seen on this machine: a project under `/tmp` (`/private/tmp`) failed containment with `grant is too broad to be authorized`, which is why the workshop's folders live in your home. Which file under `/private/tmp` triggers it was not found out.
 
 <Seat who="security">
 
@@ -107,7 +110,7 @@ The box gives you three places where a decision can happen and be recorded: the 
 
 <Seat who="developer">
 
-The agent still starts in your project folder and still reaches the model and the services it needs, but only those you name in the profile. Every missing piece shows up as an error: a folder Claude Code cannot open, a host the gateway refuses. The next pages are a sequence of exactly those errors, each fixed by one setting, so you learn what Claude Code actually needs.
+The agent still starts in your project folder and still reaches the model and the services it needs, but only those you name in the profile. Every missing piece shows up as an error, such as a host the gateway refuses. The next pages are a sequence of exactly those errors, each fixed by one setting, so you learn what Claude Code actually needs.
 
 </Seat>
 

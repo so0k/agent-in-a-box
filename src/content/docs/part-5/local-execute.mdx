@@ -9,47 +9,65 @@ sidebar:
     class: "aib-badge aib-badge-handson"
 ---
 
-import { FileTree } from '@astrojs/starlight/components';
+import { Aside, FileTree } from '@astrojs/starlight/components';
 import { PartProgress, Pieces, CatchUp, Iteration, Command, Flag, Why, ReadMore, Expect, Seat } from '~/components';
 
 <PartProgress current="part-5/local-execute" />
 
-After this page you will understand the one new piece this workshop proposes: an MCP server with the same two tools as code mode, `search` and `execute`, whose `execute` runs the agent's script inside the box. Part 4 showed that one tool per operation lets the security engineer decide each operation, but each run cost about 240,000 input tokens and waited more than a minute for the tool list. The story now needs both things at once: code mode's small tool list for the developer, and a decision on every API request for the security engineer.
+After this page you will understand the one new piece this workshop proposes: an MCP server with the same two tools as code mode, `search` and `execute`, whose `execute` runs the agent's script inside the box. Part 4 showed that one tool per operation lets the security engineer decide each operation, but each run cost 246,000 to 329,000 input tokens and waited more than a minute for the tool list. The story now needs both things at once: code mode's small tool list for the developer, and a decision on every API request for the security engineer.
 
 <CatchUp>
 
 These are the files as they stand at the end of the argument-rules act. The profile and the `.dw` files live in `$HOME/box-ws/profiles/ws/`, the JSON files in `$HOME/leaderboard-ops/`.
 
 ```toml title="$HOME/box-ws/profiles/ws/profile.toml"
-packs = ["@box/base"]
-policies = ["operate-tools.dw", "args.dw"]
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw", "operate-tools.dw", "args.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
 MCP_TIMEOUT = "300000"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.cloudflare]
 type = "http"
 destinations = ["mcp.cloudflare.com"]
 secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
+```
+
+```text title="$HOME/box-ws/profiles/ws/policy.dw"
+// Copied from @box/locked (Locked) by `box profile create`. This file is yours: only
+// `box profile create --force` replaces it. Edit the rules here, and the next run
+// uses them.
+
+// The box's shell runs none of its own commands, such as cd, cat, or echo, and the agent reaches
+// its project and what your packs and profile allow, such as the model and package registries. A
+// tool that a pack declares, such as git, still starts, because box writes its permit. The agent's
+// own file tools still work: your profile's filesystem lists decide what they reach.
+
+// Let programs read and write /dev/null, which they redirect output to all the time.
+@id("dev_null")
+permit (principal, action in [Box::Action::"fs:read", Box::Action::"fs:write"], resource)
+when { context.input.path == "/dev/null" };
+
+//
+// To let the shell run some commands, add a rule that names them. Agents run uname at startup to
+// identify the system, such as:
+//
+// @id("shell_commands")
+// permit (principal, action == Box::Action::"shell:exec", resource)
+// when { ["uname", "cd", "pwd", "ls", "cat", "grep", "head", "tail", "wc"].contains(context.input.program) };
 ```
 
 ```text title="$HOME/box-ws/profiles/ws/operate-tools.dw"
@@ -128,7 +146,7 @@ Each act so far traded one thing for another.
 
 - In the opaque-execute act the vendor's `execute` ran the agent's script on Cloudflare's side. Box saw one `mcp:call` for `execute` and no request to `api.cloudflare.com` at all. The logs came back.
 - In the deny-execute act the security engineer refused `execute` by name. Both tasks were refused, the harmless one too.
-- In the tool-allowlist and argument-rules acts the vendor's server offered one tool per API operation, 3,053 of them. The policy could decide each operation and even its arguments. The developer paid for it: about 240,000 input tokens and 75 to 85 seconds per run, measured on the newer builds (see [Measurements](/results/measurements/)).
+- In the tool-allowlist and argument-rules acts the vendor's server offered one tool per API operation, 3,053 of them. The policy could decide each operation and even its arguments. The developer paid for it: 246,000 to 329,000 input tokens and 77.5 to 81.8 seconds per run, measured on 2026-11-24 on the fork build (see [Measurements](/results/measurements/)).
 
 The question for Part 5: can the developer keep the small tool list of code mode while the security engineer still decides every API request?
 
@@ -195,6 +213,46 @@ Box puts a stand-in program, an alias, on the agent's `PATH`, named after the fi
 
 If the two declarations differ, the alias runs the next ordinary program of that name on the agent's `PATH`, with no MCP checks at all (Box docs, `mcp.md`). In this workshop's box there is no other `node` on the agent's `PATH`, so the start simply fails. Measured in an earlier test with a scratch server: `strands-box: no ordinary executable for "node" on the agent's PATH`, exit status 127.
 
+## Back to the release
+
+Part 4 ran on the fork build. From here on we use the Box 0.3.0 release again, so we put it first on the `PATH`.
+
+<Command what="Puts the Box 0.3.0 release in front of the fork build on the PATH, for this terminal.">
+
+```sh
+export PATH="$HOME/box-0.3.0:$PATH"
+```
+
+<Flag name="export">Makes the variable visible to every program started from this terminal.</Flag>
+<Flag name="$HOME/box-0.3.0">The folder where the set-up unpacked the release.</Flag>
+<Flag name=":$PATH">Keeps the folders that were already on the `PATH`, after the new one.</Flag>
+
+</Command>
+
+<Command what="Prints the version of the box command the shell now finds.">
+
+```sh
+box --version
+```
+
+<Flag name="--version">Prints the version and stops.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+box 0.3.0
+```
+
+</Expect>
+
+The shell runs the first `box` it finds on the `PATH`, so the folder put first wins: `box 0.3.0` is the release, `box 0.1.0` the fork. Both builds read the same `BOX_HOME`, the same profile `ws` and the same storage (measured), so nothing else changes. A new terminal that runs the set-up's lines starts on the release already.
+
+<Aside type="note" title="Not run for this workshop">
+The PATH lines were not run for this workshop; the runs called each binary by its full path. `"$HOME/box-0.3.0/box" --version` printing `box 0.3.0` is measured.
+</Aside>
+
 ## Build it, one change at a time
 
 Every iteration below uses one free check. It runs Claude Code in the box with an invalid model key: Claude Code starts its MCP servers, makes its first model call, gets refused by the Anthropic API, and stops. Nothing is billed.
@@ -229,33 +287,28 @@ Two commands read the result. `head -1 check.jsonl` prints the `init` event: loo
 
 <Iteration n={1} title="The vendor leaves the path">
 
-**What we change.** Three lines go out of the profile: the `policies` line, the `MCP_TIMEOUT` line and the whole `[mcp.cloudflare]` table. The three `.dw` files can stay on disk; no profile lists them now.
+**What we change.** The act files go out of the `policies` line, and only the starter `policy.dw` stays. The `MCP_TIMEOUT` line and the whole `[mcp.cloudflare]` table go out too. The three act `.dw` files can stay on disk; no profile lists them now.
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml" del={2,18,25-29}
-packs = ["@box/base"]
-policies = ["operate-tools.dw", "args.dw"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" del={5,19-24} ins={6}
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw", "operate-tools.dw", "args.dw"]
+policies = ["policy.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
 MCP_TIMEOUT = "300000"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.cloudflare]
 type = "http"
@@ -280,6 +333,10 @@ ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key box run ws --no-banner -- --bare 
 </Command>
 
 **What we see.** Claude Code still knows the server, but Box no longer does, so its host is closed again.
+
+<Aside type="note" title="Not run for this workshop">
+Measured earlier with the hand-written profile, on an earlier local build; not run again for this workshop.
+</Aside>
 
 <Expect variant="refuse">
 
@@ -331,6 +388,7 @@ The new file sits in the workspace, and its argument points into the copy of the
   - profiles/
     - ws/
       - profile.toml you edit this
+      - policy.dw the starter, still listed
       - no-remote-execute.dw no longer listed
       - operate-tools.dw no longer listed
       - args.dw no longer listed
@@ -355,6 +413,10 @@ The new file sits in the workspace, and its argument points into the copy of the
 
 **What we see.** The server fails, and Box records nothing for it.
 
+<Aside type="note" title="Not run for this workshop">
+Measured earlier with the hand-written profile, on an earlier local build; not run again for this workshop.
+</Aside>
+
 <Expect variant="refuse">
 
 ```text
@@ -367,7 +429,7 @@ There is no row for `exec-proxy` in `box runs history`.
 
 <Why>
 
-This iteration shows that Claude Code's file alone does nothing inside the box. The agent's `PATH` in the box is `/usr/bin:/bin` (set by the `@box/base` pack), and it holds no `node`. Nothing started, so Box had nothing to decide.
+This iteration shows that Claude Code's file alone does nothing inside the box. The agent's `PATH` in the box is `/usr/bin:/bin` (set by `@box/base`, which `@box/claude` brings in), and it holds no `node`. Nothing started, so Box had nothing to decide.
 
 <Fragment slot="alternative">
 
@@ -394,29 +456,24 @@ mise where node@22
 
 </Command>
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={24-26}
-packs = ["@box/base"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={19-21}
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.exec-proxy]
 type = "stdio"
@@ -430,6 +487,10 @@ command = ["${{ home }}/.local/share/mise/installs/node/22.23.4/bin/node", "${{ 
 **The run.** The free check of this part.
 
 **What we see.** Policy permits the start, and the server still does not answer.
+
+<Aside type="note" title="Not run for this workshop">
+Measured earlier with the hand-written profile, on an earlier local build; not run again for this workshop.
+</Aside>
 
 <Expect>
 
@@ -448,7 +509,7 @@ strands-box broker: rejected client: MCP server closed stdout before it sent a c
 
 </Expect>
 
-The status is `pending` after Claude Code's default 30 second wait for a server. The first line on the terminal says the server ended before it answered. The reason is that its sandbox gives it nothing to read: not Node's own libraries, not the proxy's code. Box does not show Node's own error message; that is one of the [gaps](/results/builds-and-gaps/). The second line is Box's start-up report warning that a Node server can run any program it can reach and load code from where it can write. In this profile it can write nowhere.
+The status is `pending` after Claude Code's default 30 second wait for a server. The first line on the terminal says the server ended before it answered. The reason is that its sandbox gives it nothing to read: not Node's own libraries, not the proxy's code. Box does not show Node's own error message; that is one of the [gaps](/results/builds-and-gaps/). The second line is Box's start-up report warning that a Node server (this report line is also printed by Box 0.3.0, measured with the finished profile of the request-rules act) can run any program it can reach and load code from where it can write. In this profile it can write nowhere.
 
 <Why>
 
@@ -468,29 +529,24 @@ A bare `node` as element 0 would be looked up on the `PATH` of the shell that ru
 
 **What we add.** One list, `filesystem.read`, with three folders the server may read.
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={27-31}
-packs = ["@box/base"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={22-26}
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.exec-proxy]
 type = "stdio"
@@ -510,6 +566,10 @@ filesystem.read = [
 
 **What we see.** The server connects and offers its two tools.
 
+<Aside type="note" title="Not run for this workshop">
+This iteration's own check was measured earlier with the hand-written profile, on an earlier local build; not run again for this workshop. The end state, connected with two tools, is confirmed by the request-rules act's free check on Box 0.3.0, with a later profile that also holds the route and the rules.
+</Aside>
+
 <Expect variant="permit">
 
 ```text
@@ -518,7 +578,7 @@ permit  shell:spawn  ~/.local/share/mise/installs/node/22.23.4/bin/node  mcp_exe
 permit  mcp:call     exec-proxy/tools/list                               mcp_exec-proxy_call
 ```
 
-The `init` event lists the two tools `mcp__exec-proxy__execute` and `mcp__exec-proxy__search`. The whole free check took 3 seconds. With the per-endpoint catalog of Part 4 it took 73 seconds.
+The `init` event lists the two tools `mcp__exec-proxy__execute` and `mcp__exec-proxy__search`. The whole free check took about 3 seconds (2.5 s in the request-rules act's free check on Box 0.3.0). With the per-endpoint catalog of Part 4 it took 67.5 s.
 
 </Expect>
 
@@ -540,29 +600,24 @@ Only read access, and only to the three folders the server needs. The server can
 
 **What we add.** One line: the server's environment holds the Cloudflare account of the workshop app.
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={32}
-packs = ["@box/base"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={27}
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.exec-proxy]
 type = "stdio"

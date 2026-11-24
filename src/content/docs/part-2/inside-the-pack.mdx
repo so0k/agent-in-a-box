@@ -1,0 +1,314 @@
+---
+title: "Inside the pack"
+description: "What the Claude Code pack puts into the profile, what it copies from your own Claude Code set-up, the system prompt it adds, and the same profile written by hand."
+sidebar:
+  label: "Inside the pack"
+  order: 3
+  badge:
+    text: "Concept"
+    class: "aib-badge aib-badge-concept"
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+import { PartProgress, Pieces, CatchUp, Command, Flag, Expect, Seat, ReadMore } from '~/components';
+
+<PartProgress current="part-2/inside-the-pack" />
+
+On this page we look inside the Claude Code pack: the settings it adds to the profile, the three decisions `box profile create` asked about, what it copies from your own Claude Code set-up, the system prompt it gives the agent, and the agent's own traffic. At the end we compare it with the same profile written by hand, as an earlier version of this workshop did. Nothing changes in your files on this page.
+
+<CatchUp>
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml"
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw"]
+
+# How much of your project the agent reaches: "none", "read", "write".
+[project]
+access = "read"
+
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
+```
+
+```text title="$HOME/box-ws/profiles/ws/policy.dw"
+// Copied from @box/locked (Locked) by `box profile create`. This file is yours: only
+// `box profile create --force` replaces it. Edit the rules here, and the next run
+// uses them.
+
+// The box's shell runs none of its own commands, such as cd, cat, or echo, and the agent reaches
+// its project and what your packs and profile allow, such as the model and package registries. A
+// tool that a pack declares, such as git, still starts, because box writes its permit. The agent's
+// own file tools still work: your profile's filesystem lists decide what they reach.
+
+// Let programs read and write /dev/null, which they redirect output to all the time.
+@id("dev_null")
+permit (principal, action in [Box::Action::"fs:read", Box::Action::"fs:write"], resource)
+when { context.input.path == "/dev/null" };
+
+//
+// To let the shell run some commands, add a rule that names them. Agents run uname at startup to
+// identify the system, such as:
+//
+// @id("shell_commands")
+// permit (principal, action == Box::Action::"shell:exec", resource)
+// when { ["uname", "cd", "pwd", "ls", "cat", "grep", "head", "tail", "wc"].contains(context.input.program) };
+```
+
+```json title="$HOME/leaderboard-ops/cloudflare-code-mode.json"
+{
+  "mcpServers": {
+    "cloudflare": {
+      "type": "http",
+      "url": "https://mcp.cloudflare.com/mcp",
+      "headers": { "Authorization": "Bearer ${CLOUDFLARE_MCP_TOKEN}" }
+    }
+  }
+}
+```
+
+</CatchUp>
+
+<Pieces stage={2} />
+
+The picture does not change on this page. Everything below sits in the contained filesystem view and in the agent's sandbox, decided by the packs.
+
+## The pack's settings
+
+`box profile show` lists the packs; with `--full` it also prints the `box.toml` and the `policy.dw` that a run gets.
+
+<Command what="Prints the generated box.toml and policy.dw of the profile, for the current folder. It starts no box.">
+
+```sh
+box profile show ws --full
+```
+
+<Flag name="--full">Adds the full generated configuration after the summary.</Flag>
+
+</Command>
+
+<Expect title="What you should see (an excerpt of the box.toml part)">
+
+```text
+[agent]
+command = ["~/.local/share/claude/versions/2.1.331", "--append-system-prompt-file", "~/box-0.3.0/resources/packs/claude/box.md", "--append-system-prompt", "This run's box profile is the folder ~/box-ws/profiles/ws, and its file is ~/box-ws/profiles/ws/profile.toml."]
+workspace = "~/leaderboard-ops"
+```
+
+</Expect>
+
+This output was taken with the opaque-execute act's profile, two pages on; its `[agent]` part is the same. The rest of the `box.toml` part, line by line:
+
+| Line | From | What it does |
+|---|---|---|
+| `[agent] command` | `@box/claude` | Starts the versioned Claude Code binary with the pack's system prompt file `box.md` and one line naming the profile, then your arguments after `--`. No `--dangerously-skip-permissions`, because `agent.skip-permissions` is false. |
+| `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_TMPDIR`, `TMPDIR` | `@box/claude` | Point Claude Code at the two storage folders, `config` and `tmp`. |
+| `DISABLE_AUTOUPDATER` | `@box/claude` | Set to `1`: Claude Code does not update itself inside the box. |
+| `IS_SANDBOX` | `@box/claude` | Set to `1`. The pack's file gives no reason for it, and what Claude Code does with it was not checked. |
+| `CLAUDE_CODE_ENABLE_TELEMETRY`, two more `CLAUDE_CODE_` variables and eight `OTEL_` settings | `@box/claude` | Claude Code's OpenTelemetry export. They sent nothing in these runs (below). |
+| `PATH = "/usr/bin:/bin"`, `TERM`, `COLORTERM` | `@box/base`, through `@box/claude` (read from the packs' files, inferred) | The agent's `PATH` holds only the system folders. |
+| `[agent.filesystem]` | `@box/claude` and your `[project]` | Read the project; read and exec the binary; read and write the storage folders; read `box.md`; exec `/usr/bin/plutil`; deny the project's `.box` folder. |
+| `[egress.anthropic]` | `@box/anthropic` | The route to `api.anthropic.com`, with the key from `env://ANTHROPIC_API_KEY`, header `x-api-key` and stand-in prefix `sk-ant-`. |
+| `[telemetry.records]` | the box CLI (inferred) | Box's own records of the run, in `records.jsonl` in the run folder, with `deny`, `permit`, `trace` and `logs`. |
+
+The pack does not set `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` or `MCP_TIMEOUT` itself: the profile adds those on later pages. It does pass some of Claude Code's behaviour variables from your shell, such as `MAX_THINKING_TOKENS` and `MCP_TIMEOUT`, when your shell sets them (`claude.import-env`, from the pack's file).
+
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/packs/" source="Box docs">Packs</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/packs/" source="Box docs">Pack reference</ReadMore>
+
+## The three decisions at creation
+
+`box profile create` asked three questions. Each one decides something the pack cannot decide for you.
+
+- **Import your MCP servers:** with yes, the servers in your `~/.claude.json` come into the box, with their hosts reachable and their keys in their settings. The acts name their one server on the command line instead, so we answered no.
+- **Run your command hooks:** with yes, each hook in your `~/.claude/settings.json` that runs one shell script runs in the box. The question itself says a hook is not a guardrail, because the agent can change its own settings. We answered no; the rules go in Box policy.
+- **The starter policy:** a copy into the profile's `policy.dw`. We chose Locked.
+
+The three policy starters:
+
+- **`open`:** project `write`; permits every shell command, every connection and every HTTP request, but forbids loopback and link-local addresses.
+- **`scoped`:** project `write`; permits every shell command and `/dev/null`, and no network rule: the agent reaches only what the packs and the profile declare.
+- **`locked`:** project `read`; permits only `/dev/null`. No shell command and no network rule.
+
+Locked is the closest to the default deny this workshop wants, and its read-only project matches the story. Compared with a profile that has no `policies` line at all, Locked adds only the `dev_null` permit and its comments: without the line, the run's policy holds the generated rules alone (measured).
+
+The pack has five more import switches, `claude.import-skills`, `claude.import-settings`, `claude.import-app-state`, `claude.import-memory` and `claude.import-env`. `create` does not ask about them, and all five default to true (measured). Setting them in `[options]` was not run for this workshop.
+
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/starters/" source="Box docs">Starters and starter policies</ReadMore>
+
+## What comes from your own Claude Code set-up
+
+`box profile show ws` ends with eleven `copy` lines. Each one names a part of your own Claude Code set-up and where the pack puts it in the profile's storage. With nothing in your home, each line says `(absent on this host)`; with the file there, it says `(will copy)` (measured).
+
+| Copied from your home | Switch to turn it off |
+|---|---|
+| `~/.claude/CLAUDE.md` | none |
+| `~/.claude/rules` | none |
+| `~/.claude/skills` | `claude.import-skills` |
+| `~/.claude/commands` | none |
+| `~/.claude/agents` | none |
+| `~/.claude/output-styles` | none |
+| `~/.claude/themes` | none |
+| `~/.claude/keybindings.json` | none |
+| `~/.claude/settings.json` (display and permission settings, some of Claude Code's behaviour variables, and the model) | `claude.import-settings` |
+| `~/.claude.json` (onboarding, this folder's trust, interface toggles) | `claude.import-app-state` |
+| `~/.claude/projects/<this project>/memory` | `claude.import-memory` |
+
+The switches are from the pack's file, `resources/packs/claude/pack.toml`. The copies happen at the profile's first run, before Claude Code starts. The pack's file says the first eight are brought up to date with your home on each later run; that was not observed in a run.
+
+<FileTree>
+
+- box-ws/
+  - storage/
+    - ws/
+      - default/
+        - agent/
+          - config/ Claude Code's configuration folder
+            - CLAUDE.md copied, if you have one
+            - skills/ copied, if you have them
+            - settings.json copied in part, if you have one
+            - .claude.json filled in from yours, if you have one
+            - projects/ sessions and memory, one folder per project
+            - …
+          - tmp/ Claude Code's temporary folder
+
+</FileTree>
+
+A copy in storage is not yet in the model's context. To find out what reaches the model, we put a `CLAUDE.md` with a marker word and a skill named `marker-skill` into an empty home, ran a fresh profile with the same two packs once with each flag, and asked for both markers (2026-11-24, Box 0.3.0, Claude Code 2.1.331, one run each):
+
+| Flag after `--` | The marker word from `CLAUDE.md` | `marker-skill` offered | Input tokens |
+|---|---|---|---|
+| `--bare` | not seen ("unknown") | no | 2,162 |
+| `--setting-sources ""` | not seen ("unknown") | no | 4,562 |
+| none | seen | yes | 4,740 |
+
+Both files were copied into storage in every case. Only the flag kept them out of the model. That is why every act passes one: `--bare` in the code-mode acts and in Part 5, `--setting-sources ""` in Part 4. A full `~/.claude` of a reader was not tried.
+
+With your own `~/.claude.json`, `claude.import-app-state` may carry your finished onboarding into the box, so you may see fewer first-run screens than the acts list (inferred, not checked).
+
+<ReadMore href="https://github.com/strands-agents/box/blob/main/resources/packs/claude/README.md" source="Box repository">The @box/claude pack and what it imports</ReadMore>
+<ReadMore href="https://code.claude.com/docs/en/settings" source="Claude Code docs">Claude Code settings</ReadMore>
+
+## The system prompt
+
+The pack starts Claude Code with `--append-system-prompt-file` and the pack's `box.md`, a 960-word guide to the box, plus one line naming the profile's folder and file. Box passes them as flags, so `--bare` does not remove them (measured). In the `--bare` run above the model said it saw "only the system instructions about running in a box".
+
+This costs tokens. Every boxed run carries about 3,500 more input tokens than the same task without a box: the allowed task of the token-scope act, with no box, had 6,421 input tokens; the same task in the opaque-execute act had 9,900 (2026-11-24, Claude Code 2.1.331, one run each).
+
+It also changes the answers (measured):
+
+- **The banner:** the agent mentions the banner and Ctrl+Alt+R, even in `--no-banner` headless runs where there is no banner.
+- **Profile edits:** it proposes concrete profile or policy changes, sometimes with the profile's full path, and says it cannot change the policy itself.
+- **No way around:** it no longer hands over a `curl` command; it says that using the shell would get around the policy.
+- **Other tools:** it suggests `npx wrangler` commands, noting that `npx` and the hosts would have to be allowed.
+
+## The agent's own traffic
+
+The pack's telemetry variables sent nothing in these runs: no run's records hold a connection to an OpenTelemetry port or path, and Claude Code reported `"analytics_disabled":true`. Why the exporters send nothing was not established.
+
+Claude Code itself does try one host the box refuses. Three runs were made without `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, the marker runs above. The records of all three held:
+
+```text
+deny  net:connect  http-intake.logs.us5.datadoghq.com:443  <default-deny>  no permit matched
+```
+
+This is Claude Code's own event logging, not something Box needs. The Locked policy refuses it, so without the variable each run gets one refused connection in its records. The same three runs also sent event logging and metrics requests to `api.anthropic.com`, which Box allowed through the Anthropic route. Those runs used a home with no `~/.claude/settings.json` and no `~/.claude.json`; its `.claude` folder held only the test `CLAUDE.md` and skill. So the host does not come from a Claude Code setting on the machine, and no Box pack or policy names it. The pack does not set the variable; we add it on [Secrets and the egress gateway](/part-2/secrets-and-egress/).
+
+## The same profile by hand
+
+An earlier version of this workshop wrote the profile by hand, one line per failed run: a project folder Claude Code could not read (`EPERM`), a temporary folder it could not open, its own configuration folder, the base pack, then the model route. The pack gives all of that at once. Line by line:
+
+| Line of the hand-written profile | With the pack | Status |
+|---|---|---|
+| `packs = ["@box/base"]` | `["@box/claude", "@box/anthropic"]`; `@box/base` comes in through `@box/claude` | replaced |
+| `[storage] directories = ["config", "tmp"]` | set by `@box/claude` | not needed (the same folders, measured) |
+| `[agent] command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]` | set by `@box/claude`, plus `box.md` and the profile line | not needed; the pack's command adds the system prompt |
+| `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_TMPDIR`, `DISABLE_AUTOUPDATER` | set by `@box/claude` | not needed |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"` | not set by any pack | stays |
+| `MCP_TIMEOUT = "300000"` (Part 4) | not set by any pack; the pack passes one exported in your shell | stays |
+| `[egress.anthropic]` | set by `@box/anthropic`, identical | not needed |
+| `[project] access = "read"` | written by `create` with Locked | the same |
+| `[mcp.cloudflare]`, `[mcp.exec-proxy]`, `[egress.cloudflare-api]` | not in any pack | stay, unchanged |
+| `policies = ["<act file>"]` | `["policy.dw", "<act file>"]` | the starter file comes first |
+| (none) | the telemetry variables, `IS_SANDBOX`, `TMPDIR`, the `/usr/bin/plutil` grant, read grants for managed settings | new |
+
+<details>
+<summary>The same profile, written by hand (earlier version of this workshop)</summary>
+
+This is the profile of the opaque-execute act as the earlier version wrote it.
+
+```toml title="$HOME/box-ws/profiles/ws/profile.toml"
+packs = ["@box/base"]
+
+[project]
+access = "read"
+
+[storage]
+directories = ["config", "tmp"]
+
+[agent]
+command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+
+[agent.env]
+CLAUDE_CONFIG_DIR = "${{ storage.config }}"
+CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+DISABLE_AUTOUPDATER = "1"
+
+[egress.anthropic]
+destinations = ["api.anthropic.com"]
+secret.ref = "env://ANTHROPIC_API_KEY"
+secret.header = "x-api-key"
+secret.phantom_prefix = "sk-ant-"
+
+[mcp.cloudflare]
+type = "http"
+destinations = ["mcp.cloudflare.com"]
+secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
+```
+
+</details>
+
+The allowed task of each act, before and after. The "before" numbers were measured earlier with the hand-written profile on earlier builds and Claude Code versions; the "after" numbers on 2026-11-24 with the pack and Claude Code 2.1.331. One run each, so a single difference is not a trend.
+
+| Act, allowed task | Before: input tokens, cost | Built on | After: input tokens, cost | Built on |
+|---|---|---|---|---|
+| token-scope | 3,981, USD 0.0160 | no box, Claude Code 2.1.325 | 6,421, USD 0.0187 | no box |
+| opaque-execute | 3,954, USD 0.0114 | box 0.1.8 | 9,900, USD 0.0229 | Box 0.3.0 |
+| deny-execute | 4,826, USD 0.0090 | pkg-fix | 8,861, USD 0.0098 | Box 0.3.0 |
+| tool-allowlist | 241,478, USD 0.2278 | pkg | 247,816, USD 0.2253 | fork 535307a |
+| request-rules | 4,089, USD 0.0140 | pkg-fix | 8,300, USD 0.0215 | Box 0.3.0 |
+
+The token-scope act has no box, so its rise is not the pack; its cause was not established. In the boxed acts the cheap tasks roughly doubled in input tokens, which is about the size of `box.md`. [Measurements](/results/measurements/) has every run.
+
+## The perspectives
+
+<Seat who="security">
+The pack copies parts of a developer's `~/.claude` into storage, and some parts have no switch. The control that matters is the flag that keeps them away from the model, `--bare` or `--setting-sources ""`, and every act passes one. The Locked starter adds no permit beyond `/dev/null`, so every other permit of a run comes from a pack or a line of the profile you can read.
+</Seat>
+<Seat who="developer">
+The pack saves the run-by-run discovery a hand-written profile needs, and it tells the agent about the box. That guide costs about 3,500 input tokens per run, and it shows in the answers: the agent talks about the banner and proposes profile edits.
+</Seat>
+
+## What to remember
+
+- **The pack's settings:** the command with `box.md`, the storage folders and their variables, the binary's grants, and through `@box/anthropic` the model route.
+- **The copies:** eleven parts of your own Claude Code set-up are copied into storage; `--bare` or `--setting-sources ""` keeps them out of the model.
+- **The system prompt:** about 3,500 input tokens per boxed run, and `--bare` does not remove it.
+- **What stays yours:** `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, `MCP_TIMEOUT`, the MCP tables, the extra routes and the act's policy files.
+
+## Read more
+
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/packs/" source="Box docs">Packs</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/packs/" source="Box docs">Pack reference</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/starters/" source="Box docs">Starters</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/profiles/" source="Box docs">Profiles</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/profiles/#turn-off-the-agents-permission-prompts" source="Box docs">Turn off the agent's permission prompts</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/limitations/#before-turning-permission-prompts-off" source="Box docs">Before turning permission prompts off</ReadMore>
+<ReadMore href="https://github.com/strands-agents/box/blob/main/resources/packs/claude/README.md" source="Box repository">The @box/claude pack README</ReadMore>
+<ReadMore href="https://code.claude.com/docs/en/settings" source="Claude Code docs">Claude Code settings</ReadMore>
+<ReadMore href="https://code.claude.com/docs/en/cli-reference" source="Claude Code docs">Claude Code CLI reference</ReadMore>

@@ -55,7 +55,7 @@ So the rule reads the account as `context.input.path.account_id`. The kit's note
 
 ## Finding a tool's argument names with the box CLI
 
-There is no box command that prints a tool's arguments or the schema Box generates. Box Core has one (`strands-box policy generate-schema`), but the box CLI does not ship it, and this build does not know the word:
+There is no box command that prints a tool's arguments or the schema Box generates. Box Core has one (`strands-box policy generate-schema`), but the box CLI does not ship it, and the local build this was checked on did not know the word:
 
 <Command what="Asks the box CLI for a policy subcommand, to see whether it has one.">
 
@@ -75,7 +75,7 @@ box: error: unrecognized subcommand 'policy'
 
 </Expect>
 
-(Measured on the workshop's build. Box Core's command also could not express this server: it builds the server's address from the host alone and drops `?codemode=false`.) This is recorded on [Builds and gaps](/results/builds-and-gaps/). What the reader can use instead, all of it from files the tools already write:
+(Measured earlier on the `pkg-fix` build; not run again on the fork build for this workshop. Box Core's command also could not express this server: it builds the server's address from the host alone and drops `?codemode=false`.) This is recorded on [Builds and gaps](/results/builds-and-gaps/). What the reader can use instead, all of it from files the tools already write:
 
 - **The tool's name**: the first line of `check.jsonl` from any free check lists every tool Claude Code received, as `mcp__cloudflare__<name>`. Open it with `less check.jsonl` and search with `/workers_deployments`.
 - **The arguments**: the Cloudflare API reference for the operation names its path and query parameters. In per-endpoint mode they sit under `path` and `query`.

@@ -46,6 +46,7 @@ export default defineConfig({
 					items: [
 						'part-2/what-box-contains',
 						'part-2/first-profile',
+						'part-2/inside-the-pack',
 						'part-2/secrets-and-egress',
 						'part-2/mcp-through-the-broker',
 						'part-2/opaque-execute',

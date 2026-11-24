@@ -31,7 +31,7 @@ npm run build
 ## Related repositories
 
 - [strands-agents/box](https://github.com/strands-agents/box): upstream Strands Box.
-- [so0k/box, branch `bugfix/mcp-shared-definitions-workshop`](https://github.com/so0k/box/tree/bugfix/mcp-shared-definitions-workshop): upstream commit `c70fec5` plus the MCP shared-definitions fix. The workshop was measured on an earlier, uncommitted round of this fix on the same commit, so a build from the branch is not byte-identical to it. Branch `bugfix/mcp-shared-definitions` has the same fix on current upstream main.
+- [so0k/box, branch `bugfix/mcp-shared-definitions`](https://github.com/so0k/box/tree/bugfix/mcp-shared-definitions): the MCP shared-definitions fix that Part 4 needs, measured at commit `535307a`. Filed upstream as issue [#637](https://github.com/strands-agents/box/issues/637) with pull request [#638](https://github.com/strands-agents/box/pull/638) (both open as read on 2026-11-24).
 - [so0k/box-exec-proxy](https://github.com/so0k/box-exec-proxy): the local exec proxy of Part 5 and the sample app.
 
 ## Corrections

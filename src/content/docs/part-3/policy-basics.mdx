@@ -22,7 +22,7 @@ The picture is the one from the opaque-execute act. Nothing is added on this pag
 
 ## You already have rules
 
-You have not written a policy file yet, but your profile already produces rules. Box turns each table of `profile.toml` into rules and adds them to the run's policy. Print them:
+You have not written a rule yet. Your profile has the starter `policy.dw` that `box profile create` copied, and it already produces more rules. Box turns each table of `profile.toml`, and of its packs, into rules and adds them to the run's policy. Print them:
 
 <Command what="Shows the profile as Box resolves it, including the box.toml and policy.dw a run would get.">
 
@@ -35,9 +35,32 @@ box profile show ws --full
 
 </Command>
 
-Near the end of the output, under `# policy.dw`, are these five lines (copied from a run of `--full` on this build with the profile as it stands at the end of the opaque-execute act):
+Near the end of the output is the `# policy.dw` part. It starts with the text of your starter `policy.dw` and its one rule, `dev_null`; the rules Box generates follow. Here is its start (copied from `--full` on Box 0.3.0, 2026-11-24, with the profile as it stands at the end of the opaque-execute act):
 
 ```text title="Part of box profile show ws --full"
+# policy.dw
+// Copied from @box/locked (Locked) by `box profile create`. This file is yours: only
+// `box profile create --force` replaces it. Edit the rules here, and the next run
+// uses them.
+
+// The box's shell runs none of its own commands, such as cd, cat, or echo, and the agent reaches
+// its project and what your packs and profile allow, such as the model and package registries. A
+// tool that a pack declares, such as git, still starts, because box writes its permit. The agent's
+// own file tools still work: your profile's filesystem lists decide what they reach.
+
+// Let programs read and write /dev/null, which they redirect output to all the time.
+@id("dev_null")
+permit (principal, action in [Box::Action::"fs:read", Box::Action::"fs:write"], resource)
+when { context.input.path == "/dev/null" };
+
+//
+// To let the shell run some commands, add a rule that names them. Agents run uname at startup to
+// identify the system, such as:
+//
+// @id("shell_commands")
+// permit (principal, action == Box::Action::"shell:exec", resource)
+// when { ["uname", "cd", "pwd", "ls", "cat", "grep", "head", "tail", "wc"].contains(context.input.program) };
+
 @id("route_anthropic_connect") permit (principal, action == Box::Action::"net:connect", resource) when { (context.input.host == "api.anthropic.com" && context.input.port == 443) };
 @id("route_anthropic_request") permit (principal, action == Box::Action::"http:request", resource) when { context.input.host == "api.anthropic.com" };
 @id("mcp_cloudflare_call") permit (principal, action == Box::Action::"mcp:call", resource) when { context.input.server == "cloudflare" };
@@ -45,7 +68,7 @@ Near the end of the output, under `# policy.dw`, are these five lines (copied fr
 @id("mcp_cloudflare_request") permit (principal, action == Box::Action::"http:request", resource) when { context.input.host == "mcp.cloudflare.com" };
 ```
 
-The first two come from the `[egress.anthropic]` route you wrote on [Secrets and the egress gateway](/part-2/secrets-and-egress/). The last three come from the `[mcp.cloudflare]` table you wrote on [MCP through the broker](/part-2/mcp-through-the-broker/). Further down are rules for your storage folders (`storage_0_read` and so on), for the project (`project_read`), and forbids that keep the agent out of Box's own folders (`box_home_*`, `resources_*`, `protected_*`, `project_configuration_*`).
+Of the generated rules, the first two come from the `@box/anthropic` pack's route ([Secrets and the egress gateway](/part-2/secrets-and-egress/)). The other three come from the `[mcp.cloudflare]` table you wrote on [MCP through the broker](/part-2/mcp-through-the-broker/). Further down are rules for your storage folders (`storage_0_read` and so on), for the project (`project_read`), and forbids that keep the agent out of Box's own folders (`box_home_*`, `resources_*`, `protected_*`, `project_configuration_*`).
 
 These rules are written in **Dogwood**, the policy language of Box. Dogwood is **Cedar**, an open source language for authorization rules, plus rules that can look back at what happened earlier in the run. Everything on this page except the last section is plain Cedar.
 
@@ -96,7 +119,7 @@ A condition reads the request's details from `context.input`. Which fields there
 A rule ends with `;`. Lines that start with `//` are comments and are ignored.
 
 <Why title="Why the generated rule has no tool in it">
-`mcp_cloudflare_call` checks only `server`. So it admits every method and every tool of the cloudflare server: `search`, `docs`, `execute` and the rest. That is why the opaque-execute act needed no policy file of yours, and why the logs came back.
+`mcp_cloudflare_call` checks only `server`. So it admits every method and every tool of the cloudflare server: `search`, `docs`, `execute` and the rest. That is why the opaque-execute act needed no rule of yours, and why the logs came back.
 
 <Fragment slot="alternative">
 Box's docs show an allow-list written as a `permit` that names the tools. With the box CLI you cannot change the generated permit (it is written from the `[mcp.cloudflare]` table every run), so a restriction has to be a `forbid`. The next section shows why a second, narrower `permit` would not help.
@@ -134,17 +157,17 @@ The order of the rules in the file decides nothing. Box checks only one case of 
 
 ### What happens when nothing matches
 
-You saw default deny on [Secrets and the egress gateway](/part-2/secrets-and-egress/). Before the profile had a route, the egress gateway refused the model API, and the history said why:
+You saw default deny on [Secrets and the egress gateway](/part-2/secrets-and-egress/). Before the profile had `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, the egress gateway refused Claude Code's own event-logging host, and the history said why (measured on Box 0.3.0, 2026-11-24):
 
 <Expect variant="refuse">
 
 ```text
-deny       net:connect  api.anthropic.com:443  <default-deny> no permit matched
+deny       net:connect  http-intake.logs.us5.datadoghq.com:443  <default-deny>  no permit matched
 ```
 
 </Expect>
 
-`<default-deny>` in the RULE column means no rule of yours refused it: nothing permitted it. After you added `[egress.anthropic]`, the same request was decided by a generated permit and the row read `permit net:connect api.anthropic.com:443 route_anthropic_connect`.
+`<default-deny>` in the RULE column means no rule of yours refused it: nothing permitted it. The model host, in the same run, was decided by a generated permit, and its row read `permit net:connect api.anthropic.com:443 route_anthropic_connect`.
 
 ### A permit only widens
 
@@ -154,12 +177,12 @@ Because a request goes through if any permit matches, adding a narrower permit n
 
 A policy file is a text file with the `.dw` extension. It sits in the profile's folder, next to `profile.toml`, and the profile names it in a top-level list:
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml (first lines)"
-packs = ["@box/base"]
-policies = ["no-remote-execute.dw"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml (lines 4 and 5)"
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw", "no-remote-execute.dw"]
 ```
 
-`policies` is a top-level key like `packs`, so it must come before the first `[table]`. When you start a run, Box writes the run's own `policy.dw` into the run folder (`$HOME/box-ws/r/<box ID>/policy.dw`): your files first, in the order of the list, then the generated rules. Box Core, the engine that runs the box, loads that file before the agent starts.
+The starter file comes first: in the measured runs the act's rule followed the starter's text in the run's `policy.dw`. That Box joins any further files in list order is inferred; it was not run for this workshop with more than one file of your own. `policies` is a top-level key like `packs`, so it must come before the first `[table]`. When you start a run, Box writes the run's own `policy.dw` into the run folder (`$HOME/box-ws/r/<box ID>/policy.dw`): your files first, then the generated rules. Box Core, the engine that runs the box, loads that file before the agent starts.
 
 Box Core checks each rule against the actions and fields it knows. A rule with a spelling mistake in a built-in action or field, a field read without `has`, or a duplicate `@id` stops the box from starting, with the reason. `box profile show ws` runs the same check before any run.
 
@@ -170,7 +193,7 @@ Per-tool rules are the exception. Box cannot check `cloudflare::Action::"execute
 Four checks, from cheapest to most certain:
 
 1. **`box profile show ws` passes.** The file was found and every rule that can be checked before a run is well formed.
-2. **`box profile show ws --full` shows your rule at the top of `# policy.dw`.** It is in the policy a run gets.
+2. **`box profile show ws --full` shows your rule in `# policy.dw`, after the starter's text and before the generated rules.** It is in the policy a run gets.
 3. **The first run prints no per-tool warning.** If a per-tool rule could not be loaded, Box starts anyway and prints `strands-box: warning: a per-tool rule never loaded for ["cloudflare"]` on the terminal. Read the terminal after the first run of every per-tool rule.
 4. **A refusal names your rule.** `box runs history <box ID> --deny` shows the row, and the RULE column holds your `@id`.
 

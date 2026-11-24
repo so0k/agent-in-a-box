@@ -60,7 +60,7 @@ The arguments of both tools are the same shape: a string called `code`. The tool
 
 ### What it saves, measured
 
-The numbers below are from one run per cell, model `claude-sonnet-5-5` (all runs are listed on [Measurements](/results/measurements/)). Both runs are the allowed task: list the Workers and summarise the deployment of `box-poc-workshop`. The code mode run is the token-scope act, which you run next, without a box (Claude Code 2.1.325, 2026-11-14). The per-endpoint run is the tool-allowlist act from Part 4, shown here only to compare. Its first request is from the installed box 0.1.8 run (Claude Code 2.1.325, 2026-11-14). Its cost is from the local build pkg (Claude Code 2.1.330, 2026-11-21), which accepted the catalog: the allow-list refused `workers_list`, and the deployment part was answered. On box 0.1.8 every call was refused, so that run's USD 0.2216 is the cost of loading the catalog and failing, not of doing the task.
+The numbers below are from one run per cell, model `claude-sonnet-5-5` (all runs are listed on [Measurements](/results/measurements/)). Both runs are the allowed task: list the Workers and summarise the deployment of `box-poc-workshop`. The code mode run is the token-scope act, which you run next, without a box. The per-endpoint run is the tool-allowlist act from Part 4, shown here only to compare. The costs are from 2026-11-24, Claude Code 2.1.331: the token-scope act with no box, and the tool-allowlist act on the fork build at commit 535307a, which accepted the catalog: the allow-list refused `workers_list`, and the deployment part was answered. The first requests are from earlier runs on 2026-11-14 (Claude Code 2.1.325; the per-endpoint one on the installed box 0.1.8), and were not measured again.
 
 <BarChart
   title="Input tokens of the first model request, allowed task"
@@ -76,10 +76,10 @@ The numbers below are from one run per cell, model `claude-sonnet-5-5` (all runs
   title="Cost of the whole run, allowed task (USD)"
   unit="USD"
   decimals={4}
-  source="Measurements page, Claude Code's own result figures: the token-scope act with no box (Claude Code 2.1.325); the tool-allowlist act on the build pkg (Claude Code 2.1.330)"
+  source="Measurements page: the token-scope act with no box and the tool-allowlist act on the fork build at 535307a, Claude Code 2.1.331, 2026-11-24"
   data={[
-    { label: 'Code mode (the token-scope act, no box)', value: 0.0160, note: '2 turns, 1 execute, done' },
-    { label: 'Per-endpoint (the tool-allowlist act, pkg)', value: 0.2278, note: '4 turns, partly: deployments answered' },
+    { label: 'Code mode (the token-scope act, no box)', value: 0.0187, note: '2 turns, 1 execute, done' },
+    { label: 'Per-endpoint (the tool-allowlist act, fork)', value: 0.2253, note: '4 turns, partly: deployments answered' },
   ]}
 />
 
@@ -106,7 +106,7 @@ Code mode puts the whole API behind one tool. A control that decides by tool nam
 
 <Seat who="developer">
 
-Code mode is cheap and capable. The agent finds the operation it needs, does a multi-step job in one script, and the tool list costs a few thousand tokens however large the API is. The allowed task took 2 turns and 0.0160 USD. Anything that takes code mode away will cost you either usefulness or tokens; Parts 3 and 4 show both.
+Code mode is cheap and capable. The agent finds the operation it needs, does a multi-step job in one script, and the tool list costs a few thousand tokens however large the API is. The allowed task took 2 turns and 0.0187 USD. Anything that takes code mode away will cost you either usefulness or tokens; Parts 3 and 4 show both.
 
 </Seat>
 

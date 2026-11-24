@@ -18,31 +18,26 @@ After this page you will know how a Box rule names one HTTP request, by its meth
 
 <CatchUp>
 
-The files as they stand at the end of [the local exec proxy](/part-5/local-execute/). The three `.dw` files of Parts 3 and 4 may still be in the profile folder; no profile lists them, so they do nothing.
+The files as they stand at the end of [the local exec proxy](/part-5/local-execute/). The three act `.dw` files of Parts 3 and 4 may still be in the profile folder; no profile lists them, so they do nothing. `policies` lists only the starter `policy.dw`.
 
 ```toml title="$HOME/box-ws/profiles/ws/profile.toml"
-packs = ["@box/base"]
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.exec-proxy]
 type = "stdio"
@@ -53,6 +48,30 @@ filesystem.read = [
   "${{ home }}/box-exec-proxy/spec",
 ]
 env = { CLOUDFLARE_ACCOUNT_ID = "0123456789abcdef0123456789abcdef" }
+```
+
+```text title="$HOME/box-ws/profiles/ws/policy.dw"
+// Copied from @box/locked (Locked) by `box profile create`. This file is yours: only
+// `box profile create --force` replaces it. Edit the rules here, and the next run
+// uses them.
+
+// The box's shell runs none of its own commands, such as cd, cat, or echo, and the agent reaches
+// its project and what your packs and profile allow, such as the model and package registries. A
+// tool that a pack declares, such as git, still starts, because box writes its permit. The agent's
+// own file tools still work: your profile's filesystem lists decide what they reach.
+
+// Let programs read and write /dev/null, which they redirect output to all the time.
+@id("dev_null")
+permit (principal, action in [Box::Action::"fs:read", Box::Action::"fs:write"], resource)
+when { context.input.path == "/dev/null" };
+
+//
+// To let the shell run some commands, add a rule that names them. Agents run uname at startup to
+// identify the system, such as:
+//
+// @id("shell_commands")
+// permit (principal, action == Box::Action::"shell:exec", resource)
+// when { ["uname", "cd", "pwd", "ls", "cat", "grep", "head", "tail", "wc"].contains(context.input.program) };
 ```
 
 ```json title="$HOME/leaderboard-ops/exec-proxy.json"
@@ -100,7 +119,7 @@ A route in the profile, an `[egress.<name>]` table, writes both permits for its 
 
 ## Write the rules, one at a time
 
-Each run on this page is a real run, with the allowed task only, so you see the requests the agent's script really sends. It is capped at USD 0.25; the measured run of iteration 1 cost USD 0.0103.
+Each run on this page is a real run, with the allowed task only, so you see the requests the agent's script really sends. It is capped at USD 0.25; the measured run of iteration 1 cost USD 0.0173.
 
 <Iteration n={1} title="Before the route">
 
@@ -143,11 +162,12 @@ box runs history b-0123456789abcdef
 <Expect variant="refuse">
 
 ```text
-permit  shell:spawn  ~/.local/share/mise/installs/node/22.23.4/bin/node  mcp_exec-proxy_spawn
-permit  mcp:call     exec-proxy/tools/list                               mcp_exec-proxy_call
-permit  mcp:call     exec-proxy/execute                                  mcp_exec-proxy_call
-deny    net:connect  api.cloudflare.com:443                              <default-deny>  no permit matched
-deny    net:connect  api.cloudflare.com:443                              <default-deny>  no permit matched
+installed  policy       policy.dw                                           -
+permit     shell:spawn  ~/.local/share/mise/installs/node/22.23.4/bin/node  mcp_exec-proxy_spawn
+permit     mcp:call     exec-proxy/tools/list                               mcp_exec-proxy_call
+permit     mcp:call     exec-proxy/execute                                  mcp_exec-proxy_call
+deny       net:connect  api.cloudflare.com:443                              <default-deny>  no permit matched
+deny       net:connect  api.cloudflare.com:443                              <default-deny>  no permit matched
 ```
 
 The script's error, as the model received it in the tool result:
@@ -156,9 +176,15 @@ The script's error, as the model received it in the tool result:
 Error: Refused by Box egress policy (rule: default-deny) when connecting to the host (net:connect): GET /accounts/0123456789abcdef0123456789abcdef/workers/scripts was not sent. No permit policy matched this request.
 ```
 
-The run took 2 turns and cost USD 0.0103.
+The run took 2 turns, 6,600 input and 807 output tokens, USD 0.0173 and 8.2 seconds (2026-11-24, Box 0.3.0, Claude Code 2.1.331, one run). The rows leave out the time column and the model's own traffic to `api.anthropic.com`.
 
 </Expect>
+
+<Aside type="note" title="One difference in the measured run">
+The measured run's profile already listed `api-read-only.dw` (`policies = ["policy.dw", "api-read-only.dw"]`); it had no route. A refusal at `net:connect` comes before any `http:request` rule applies, so the extra file should change nothing here (inferred).
+</Aside>
+
+The answer said the request was refused under `default-deny` and never sent, and that it had not tried other routes. It then proposed a fix: a route `[egress.cloudflare]` with `destinations = ["api.cloudflare.com"]` and no secret, to add to `~/box-ws/profiles/ws/profile.toml`, or two hand-written permits "then press Ctrl+Alt+R". A route with no secret would send the request without the real token (inferred). The pack's system prompt tells the agent about profiles and Ctrl+Alt+R ([Inside the pack](/part-2/inside-the-pack/)). Iteration 2 writes the route with its secret.
 
 For the first time in this workshop, Box's records hold a row for a request to the Cloudflare API itself, not only a tool call. The refusal is `<default-deny>`: no rule permits the host, and Box refuses whatever no rule permits.
 
@@ -180,29 +206,24 @@ Skip this run and go to iteration 2. You lose nothing in the files, only the evi
 
 **What we add.** A route for the Cloudflare API, with its credential.
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={34-36}
-packs = ["@box/base"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={29-31}
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.exec-proxy]
 type = "stdio"
@@ -242,6 +263,13 @@ box profile show ws --full
 
 In the printed `policy.dw`, look for the rules with `@id("route_cloudflare-api_connect")` and `@id("route_cloudflare-api_request")`. Between them they permit a connection to `api.cloudflare.com` and every request on it: every method, every path.
 
+```text
+@id("route_cloudflare-api_connect") permit (principal, action == Box::Action::"net:connect", resource) when { (context.input.host == "api.cloudflare.com" && context.input.port == 443) };
+@id("route_cloudflare-api_request") permit (principal, action == Box::Action::"http:request", resource) when { context.input.host == "api.cloudflare.com" };
+```
+
+These two lines are from `box profile show ws --full` on Box 0.3.0 with the finished profile of the request-rules act, which also lists `api-read-only.dw`. This iteration's own state was not run for this workshop.
+
 </Expect>
 
 <Aside type="caution" title="Do not run the logs task now">
@@ -276,6 +304,7 @@ The new file sits next to the profile, beside the policy files of Parts 3 and 4 
   - profiles/
     - ws/
       - profile.toml you edit this
+      - policy.dw the starter, still first
       - **api-read-only.dw** the rules on each API request
       - no-remote-execute.dw no longer listed
       - operate-tools.dw no longer listed
@@ -307,30 +336,24 @@ unless {
 };
 ```
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={2}
-packs = ["@box/base"]
-policies = ["api-read-only.dw"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={5}
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw", "api-read-only.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.exec-proxy]
 type = "stdio"
@@ -427,7 +450,7 @@ box profile show ws
 
 </Command>
 
-**What we see.** The profile is printed with no error: both rules load. This was checked while the workshop was written.
+**What we see.** The profile is printed with no error, and its `policies` row reads `policy.dw, api-read-only.dw`: both rules load (measured on Box 0.3.0).
 
 <Why title="Why a second rule that changes no decision">
 

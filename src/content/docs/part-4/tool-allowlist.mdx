@@ -23,34 +23,52 @@ The deny-execute act kept the logs and the attendee data of the workshop progres
 <CatchUp>
 
 ```toml title="$HOME/box-ws/profiles/ws/profile.toml"
-packs = ["@box/base"]
-policies = ["no-remote-execute.dw"]
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw", "no-remote-execute.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.cloudflare]
 type = "http"
 destinations = ["mcp.cloudflare.com"]
 secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
+```
+
+```text title="$HOME/box-ws/profiles/ws/policy.dw"
+// Copied from @box/locked (Locked) by `box profile create`. This file is yours: only
+// `box profile create --force` replaces it. Edit the rules here, and the next run
+// uses them.
+
+// The box's shell runs none of its own commands, such as cd, cat, or echo, and the agent reaches
+// its project and what your packs and profile allow, such as the model and package registries. A
+// tool that a pack declares, such as git, still starts, because box writes its permit. The agent's
+// own file tools still work: your profile's filesystem lists decide what they reach.
+
+// Let programs read and write /dev/null, which they redirect output to all the time.
+@id("dev_null")
+permit (principal, action in [Box::Action::"fs:read", Box::Action::"fs:write"], resource)
+when { context.input.path == "/dev/null" };
+
+//
+// To let the shell run some commands, add a rule that names them. Agents run uname at startup to
+// identify the system, such as:
+//
+// @id("shell_commands")
+// permit (principal, action == Box::Action::"shell:exec", resource)
+// when { ["uname", "cd", "pwd", "ls", "cat", "grep", "head", "tail", "wc"].contains(context.input.program) };
 ```
 
 ```text title="$HOME/box-ws/profiles/ws/no-remote-execute.dw"
@@ -80,9 +98,61 @@ forbid (principal, action == cloudflare::Action::"execute", resource);
 
 New on the path: the egress gateway stages the server's 3,053 tools as a catalog, and the policy engine decides each tool call by its name. A listed tool reaches the Cloudflare API; the logs tool does not.
 
+## Switch to the fork build
+
+<Iteration n={1} title="Switch to the fork build">
+
+**What we add.** Nothing to the files. Box 0.3.0 has a bug that refuses the per-endpoint catalog (read from the source, not run for this workshop: [The per-endpoint catalog](/part-4/per-endpoint-catalog/#why-this-part-needs-a-local-build)), so Part 4 runs on the fork build that [the set-up](/start/setup/) made in `$HOME/box-build`. We put it first on the `PATH` for this terminal.
+
+<Command what="Puts the fork build in front of the Box 0.3.0 release on the PATH, for this terminal.">
+
+```sh
+export PATH="$HOME/box-build:$PATH"
+```
+
+<Flag name="export">Makes the variable visible to every program started from this terminal.</Flag>
+<Flag name="$HOME/box-build">The folder that holds the fork build's `box` binary, its helpers and `resources/`.</Flag>
+<Flag name=":$PATH">Keeps the folders that were already on the `PATH`, the release among them, after the new one.</Flag>
+
+</Command>
+
+<Command what="Prints the version of the box command the shell now finds.">
+
+```sh
+box --version
+```
+
+<Flag name="--version">Prints the version and stops.</Flag>
+
+</Command>
+
+<Expect>
+
+```text
+box 0.1.0
+```
+
+</Expect>
+
+The fork prints `box 0.1.0` because a local build does not stamp a version; the release prints `box 0.3.0`. That is how you tell the two apart.
+
+<Aside type="note" title="Not run for this workshop">
+The PATH lines were not run for this workshop; the runs called each binary by its full path. `"$HOME/box-build/box" --version` printing `box 0.1.0` is measured.
+</Aside>
+
+<Why>
+The shell runs the first `box` it finds on the `PATH`, so the folder put first wins. Both builds read the same `BOX_HOME`, the same profile `ws` and the same storage (measured: the runs of both builds used one Box home and one profile), so nothing else changes. A new terminal starts again from the set-up's lines: in Part 4, add this line after them. [The local-execute page](/part-5/local-execute/) switches back to the release.
+
+<Fragment slot="alternative">
+Calling the fork by its full path, `"$HOME/box-build/box" run ws ...`, works without touching the `PATH`; it is what the measured runs did. The commands on these pages are shorter with the `PATH` line.
+</Fragment>
+</Why>
+
+</Iteration>
+
 ## Switch the server and wait for it
 
-<Iteration n={1} title="A second MCP config file, for per-endpoint mode">
+<Iteration n={2} title="A second MCP config file, for per-endpoint mode">
 
 **What we add.** A new file in the workspace, a copy of the code-mode file with one changed line: the address ends in `?codemode=false`.
 
@@ -110,7 +180,7 @@ Editing `cloudflare-code-mode.json` works too, but then the file's name says the
 
 </Iteration>
 
-<Iteration n={2} title="The free check, in per-endpoint mode">
+<Iteration n={3} title="The free check, in per-endpoint mode">
 
 **What we add.** Nothing to the files. The free check changes two Claude Code flags for Part 4.
 
@@ -123,7 +193,7 @@ ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key box run ws --no-banner -- --setti
 ```
 
 <Flag name={'--setting-sources ""'}>Claude Code reads no settings file (user, project or local). It replaces `--bare` from here on: `--bare` also removes `ToolSearch`.</Flag>
-<Flag name="--mcp-config cloudflare-per-endpoint.json">The per-endpoint server from iteration 1.</Flag>
+<Flag name="--mcp-config cloudflare-per-endpoint.json">The per-endpoint server from iteration 2.</Flag>
 <Flag name="--tools ToolSearch">The only built-in tool is `ToolSearch`, so Claude Code sends the tool names and loads a definition only when the model asks for it. Without tool search the first request would be about 2.2 million tokens, over the model's limit of 1,000,000.</Flag>
 <Flag name="--allowedTools mcp__cloudflare,ToolSearch">Pre-approves the server's tools and `ToolSearch`, so the headless run never stops to ask.</Flag>
 <Flag name="(the rest)">The invalid-key prefix, `run ws --no-banner --`, `--strict-mcp-config`, `--model claude-sonnet-5-5`, `--max-turns 1`, `-p "Say hello."`, `--output-format stream-json --verbose`, `< /dev/null` and `> check.jsonl` are as in the free check of [the deny-execute act](/part-3/deny-execute/).</Flag>
@@ -141,39 +211,33 @@ permit  mcp:call  cloudflare/tools/list  mcp_cloudflare_call
 
 </Expect>
 
-Box held the reply while it staged 3,053 tools; Claude Code's start timeout (30 seconds by default) ran out first. `box run` returned only after staging ended: 150 seconds of wall time for an agent that gave up after about 30. The terminal also printed the per-tool warning, `a per-tool rule never loaded for ["cloudflare"]`. That is `no_hidden_api_calls`: this catalog has no tool called `execute`.
+Box held the reply while it staged 3,053 tools; Claude Code's start timeout (30 seconds by default) ran out first. `box run` returned only after staging ended: 163 seconds of wall time for an agent that gave up after about 30 (measured on 2026-11-24 with the fork build). The terminal also printed the per-tool warning, `a per-tool rule never loaded for ["cloudflare"]`. That is `no_hidden_api_calls`: this catalog has no tool called `execute`.
 
 </Iteration>
 
-<Iteration n={3} title="Give Claude Code time to connect">
+<Iteration n={4} title="Give Claude Code time to connect">
 
 **What we add.** One line in the agent's environment: Claude Code's MCP start timeout, in milliseconds.
 
 ```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={18}
-packs = ["@box/base"]
-policies = ["no-remote-execute.dw"]
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw", "no-remote-execute.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
 MCP_TIMEOUT = "300000"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.cloudflare]
 type = "http"
@@ -181,7 +245,11 @@ destinations = ["mcp.cloudflare.com"]
 secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
 ```
 
-**The run.** The same free check as in iteration 2.
+**The run.** The same free check as in iteration 3.
+
+<Aside type="note" title="Not run for this workshop">
+This iteration was not run for this workshop. The figures below were measured earlier on a local build with the hand-written profile.
+</Aside>
 
 **What we see.** The server connects, with 3,053 Cloudflare tools plus `ToolSearch` (3,054 in all):
 
@@ -193,13 +261,13 @@ secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
 
 </Expect>
 
-The per-tool warning is printed again, because `no_hidden_api_calls` is still listed. In the measured check the hand-over (from `tools/list` to Claude Code's next request) took 162.8 seconds and the run 167 seconds. Once the rule was removed (iteration 4) it took 70.4 seconds. Whether the rule that never loaded caused the extra time was not checked: one run each.
+The per-tool warning is printed again, because `no_hidden_api_calls` is still listed. In the earlier check the hand-over (from `tools/list` to Claude Code's next request) took 162.8 seconds and the run 167 seconds. Once the rule was removed (iteration 5) it took 70.4 seconds then, and 65 seconds on the fork build on 2026-11-24. Whether the rule that never loaded caused the extra time was not checked: one run each.
 
 <Why>
-`[agent.env]` is the agent's whole environment, so a variable Claude Code should read goes there. 300 seconds covers a staging wait of about a minute with room to spare.
+`[agent.env]` adds to the variables the pack sets, so a variable Claude Code should read goes there. The pack does not set `MCP_TIMEOUT`. 300 seconds covers a staging wait of about a minute with room to spare.
 
 <Fragment slot="alternative">
-Box has no setting for this and prints nothing while it stages; the timeout is Claude Code's. Keeping the default leaves the agent with no tools. Setting a value much larger only makes a real failure take longer to show.
+Box has no setting for this and prints nothing while it stages; the timeout is Claude Code's. Keeping the default leaves the agent with no tools. Setting a value much larger only makes a real failure take longer to show. Exporting `MCP_TIMEOUT` in your shell before `box run` also reaches the agent, because the pack passes some of Claude Code's own variables from your shell (`claude.import-env`): `box profile show ws` lists it then. No run of this workshop used that form.
 </Fragment>
 </Why>
 
@@ -207,13 +275,13 @@ Box has no setting for this and prints nothing while it stages; the timeout is C
 
 ## Write the allow-list
 
-<Iteration n={4} title="Six tools may run, the rest are refused">
+<Iteration n={5} title="Six tools may run, the rest are refused">
 
-**What we add.** A new policy file in place of `no-remote-execute.dw`, which this catalog makes pointless (there is no `execute` here). Change line 2 of `profile.toml`:
+**What we add.** A new policy file in place of `no-remote-execute.dw`, which this catalog makes pointless (there is no `execute` here). Change line 5 of `profile.toml`; the starter file `policy.dw` stays first:
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml (first two lines)" ins={2}
-packs = ["@box/base"]
-policies = ["operate-tools.dw"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml (lines 4 and 5)" ins={2}
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw", "operate-tools.dw"]
 ```
 
 The new policy file goes next to `profile.toml`, and the workspace now holds both MCP config files:
@@ -224,13 +292,14 @@ The new policy file goes next to `profile.toml`, and the workspace now holds bot
   - profiles/
     - ws/
       - profile.toml you edit this
+      - policy.dw the starter, still first
       - no-remote-execute.dw no longer listed
       - **operate-tools.dw** the allow-list
   - storage/ kept between runs
   - r/ one folder per run
 - leaderboard-ops/ the workspace
   - cloudflare-code-mode.json
-  - **cloudflare-per-endpoint.json** the per-endpoint server, from iteration 1
+  - **cloudflare-per-endpoint.json** the per-endpoint server, from iteration 2
 
 </FileTree>
 
@@ -265,9 +334,9 @@ unless {
 
 The six tools read the Worker list, one Worker, its settings, its code, its versions and its deployments. All six names are in the catalog Claude Code received (checked against the tool list in the free check's first line), as are `workers_list`, `workers_get`, `o11y_telemetry_query` and `d1_query`.
 
-**The run.** `box profile show ws` passes. Then the same free check as in iteration 2.
+**The run.** `box profile show ws` passes. Then the same free check as in iteration 3.
 
-**What we see.** The server connects with 3,053 tools, and no warning is printed. The hand-over took 70.4 seconds and the run 73 seconds in the measured check.
+**What we see.** The server connects with 3,053 Cloudflare tools (3,054 in all, with `ToolSearch`), and no warning is printed. In the measured check on 2026-11-24, with the fork build, the hand-over took 65 seconds and the run 67.5 seconds.
 
 <Expect variant="permit">
 
@@ -304,7 +373,7 @@ box run ws -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-p
 
 </Command>
 
-The minute of staging happens behind Claude Code's prompt. Whether a task typed during that minute runs without the Cloudflare tools was not checked; wait a minute before you type. Interactive mode was not checked for this act.
+The minute of staging happens behind Claude Code's prompt. Whether a task typed during that minute runs without the Cloudflare tools was not checked; wait a minute before you type. Interactive mode was not run for this workshop.
 
 </TabItem>
 <TabItem label="Headless">
@@ -312,10 +381,10 @@ The minute of staging happens behind Claude Code's prompt. Whether a task typed 
 <Command what="Runs one task in the box and writes Claude Code's event stream to a file.">
 
 ```sh
-box run ws --no-banner -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-per-endpoint.json --tools ToolSearch --allowedTools mcp__cloudflare,ToolSearch --model claude-sonnet-5-5 --max-turns 12 --max-budget-usd 0.25 -p "Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > tool-allowlist-logs.jsonl
+box run ws --no-banner -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-per-endpoint.json --tools ToolSearch --allowedTools mcp__cloudflare,ToolSearch --model claude-sonnet-5-5 --max-turns 12 --max-budget-usd 0.40 -p "Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > tool-allowlist-logs.jsonl
 ```
 
-<Flag name="--max-budget-usd 0.25">The money cap. Each measured run of this act cost between $0.22 and $0.24, close to it, because of the tool names.</Flag>
+<Flag name="--max-budget-usd 0.40">The money cap. The runs measured for this workshop used 0.25: they cost USD 0.2201 to 0.2537, because of the tool names, and the logs run went over 0.25, so Claude Code ended it with `error_max_budget_usd` and reported no result. 0.40 leaves room for one more turn. Runs with 0.40 were not made for this workshop.</Flag>
 <Flag name={'-p "..."'}>The task. Run it three times, once per sentence below, and write to `tool-allowlist-logs.jsonl`, `tool-allowlist-allowed.jsonl` and `tool-allowlist-steer.jsonl`.</Flag>
 <Flag name="(the rest)">As in the free check, with `--max-turns 12`.</Flag>
 
@@ -332,46 +401,43 @@ box run ws --no-banner -- --setting-sources "" --strict-mcp-config --mcp-config 
 
 ## What you see
 
-The decisions below were measured on an earlier local build (`pkg`), with the kit's version of this rule: the same six tools under the id `logstools_vendor_allowlist`. With your file the RULE column reads `operate_tools_only` (inferred from the rule's id: your file was run as a paid run on `pkg-fix`, but the decisions of those runs were not recorded in the notes). Time column, `net:connect` rows and the gateway's `http:request` rows are left out.
+The decisions below were measured on 2026-11-24 with the fork build, as `box runs history <box ID>` printed them. Every history starts with `installed policy policy.dw`; the time column, `net:connect` rows and the gateway's `http:request` rows are left out.
 
 ### The logs task: refused by name
 
 <Expect variant="refuse">
 
 ```text
-permit  mcp:call  cloudflare/tools/list            mcp_cloudflare_call
-permit  mcp:call  cloudflare/resources/list        mcp_cloudflare_call
-deny    mcp:call  cloudflare/o11y_telemetry_query  logstools_vendor_allowlist
+installed  policy    policy.dw                        -
+permit     mcp:call  cloudflare/resources/list        mcp_cloudflare_call
+permit     mcp:call  cloudflare/tools/list            mcp_cloudflare_call
+deny       mcp:call  cloudflare/o11y_telemetry_query  operate_tools_only  a forbid rule matched
 ```
 
 </Expect>
 
-The model loaded `o11y_telemetry_query` with `ToolSearch`, called it, and got the refusal. The shape of the refusal text was measured with the kit's rule.
+The model loaded `o11y_telemetry_query` with `ToolSearch`, called it, and got the refusal:
 
-<Aside type="note" title="Inferred, not run with your file">
-
-The text below puts your rule's id and description into the measured shape.
-
-</Aside>
-
-```text title="The refusal, as the model sees it (your rule)"
+```text title="The refusal, as the model saw it"
 mcp:call gate (server "cloudflare" method "tools/call"): policy denied this operation on 'cloudflare/o11y_telemetry_query' [policy: operate_tools_only]: Only the tools that read the Workers and their deployments may run. The Worker's logs and the attendee data hold names and emails, and the agent may not deploy or delete.
 ```
 
-The answer said it could not get the logs, that this was a policy block and not a missing permission, and that it did not try other tools. It then listed ways to get the logs outside the box (`npx wrangler tail`, the Cloudflare dashboard), and suggested adding `o11y_telemetry_query` to the policy.
+Before that call, the model tried Claude Code's `Bash` tool once, with `date +%s`, to read the time. Claude Code refused it (`Error: No such tool available: Bash. Bash is disabled for this session, in subagents as well as here.`), because `--tools ToolSearch` leaves no shell, and Box saw nothing of it. Whether the pack's system prompt led to that call is not known. The model then queried a whole day it chose itself.
+
+The answer said the box's policy `operate_tools_only` denied the call, and that it had not tried another route, "since that would work around the policy". It offered two ways on: add a permit to a policy file in the profile "then press Ctrl+Alt+R", or run `npx wrangler tail box-poc-workshop` or open the Cloudflare dashboard yourself. (The pack's system prompt tells the agent about the banner and Ctrl+Alt+R, even in a run with `--no-banner`: [Inside the pack](/part-2/inside-the-pack/).) The extra turn took the run to USD 0.2537, over its cap of 0.25. Claude Code ended it with `error_max_budget_usd`, so the answer is in the stream but there is no result event.
 
 ### The allowed task: half done
 
 <Expect variant="refuse" title="What you should see: one refused, one permitted">
 
 ```text
-deny    mcp:call  cloudflare/workers_list              logstools_vendor_allowlist
+deny    mcp:call  cloudflare/workers_list              operate_tools_only  a forbid rule matched
 permit  mcp:call  cloudflare/workers_deployments_list  mcp_cloudflare_call
 ```
 
 </Expect>
 
-The model loaded three tools with `ToolSearch`: `workers_list`, `workers_deployments_list` and `workers_get`. It called `workers_list` for the Worker list, which is refused, and `workers_deployments_list`, which runs. The answer: the Worker list was blocked, and here is the current deployment of `box-poc-workshop` (one version at 100 percent, created 2026-11-14 14:17 UTC, four deployments in all). It said it had not tried another tool to get around the block, "such as the legacy scripts listing".
+The model loaded three tools with `ToolSearch`: `workers_list`, `workers_deployments_list` and `workers_legacy_scripts_list`. It called `workers_list` for the Worker list, which is refused, and `workers_deployments_list`, which runs. The answer: the Worker list was blocked, and here is the current deployment of `box-poc-workshop` (one version at 100 percent, created 2026-11-24 05:09 UTC, 5 deployments in all). It put the block down to "the Cloudflare MCP server's `operate_tools_only` policy", although the rule is the box's. It said it had not tried other tools to get the list another way, and offered to try `workers_legacy_scripts_list` if told to.
 
 This is the honest result of a tool-name allow-list. Cloudflare's API has two operations that list Workers: the older one, behind `workers_legacy_scripts_list`, which is on the list, and a newer one, behind `workers_list`, which is not. The model picked the newer one. An allow-list of names must name every tool a model might pick for the same job. The security engineer chose six tools from the operations the team agreed on; the model chose a seventh.
 
@@ -385,7 +451,7 @@ permit  mcp:call  cloudflare/workers_deployments_list  mcp_cloudflare_call
 
 </Expect>
 
-Told which tool to use, the model loaded only `workers_deployments_list` and called it once. The call was permitted and the answer listed the four deployments of `box-poc-workshop`, newest first. The steering sentence is the one the kit's runbook gives; whether the measured run typed exactly this sentence is not recorded.
+Told which tool to use, the model loaded only `workers_deployments_list` and called it once. The call was permitted and the answer listed the 5 deployments of `box-poc-workshop`, newest first, the newest of 2026-11-24 05:09 UTC. The measured run typed the steering sentence exactly as shown.
 
 <Aside type="tip" title="Exercise (not checked)">
 Add `"workers_list"` and `"workers_get"` to the list and run the allowed task again. Both are read operations on the Workers; the team's constraint allows them. This change was not run for the workshop.
@@ -397,16 +463,16 @@ Add `"workers_list"` and `"workers_get"` to the list and run the allowed task ag
 The policy now sees which operation the agent asks for, and refuses the logs by name before the request reaches Cloudflare. A new tool in the catalog is refused until someone lists it. But the allow-list is only as good as its names: the model reached for `workers_list`, which the security engineer did not think of. And an allowed tool's answer is not checked: the deployments list returned the deployer's email address in its metadata.
 </Seat>
 <Seat who="developer">
-The deployment question is answered and the logs are refused, but the Worker list is not, unless the developer steers the model to a listed tool or asks the security engineer to widen the list. Every run waits about a minute for the catalog and costs about $0.22 to $0.24, against $0.01 to $0.07 for the deny-execute act's runs in code mode.
+The deployment question is answered and the logs are refused, but the Worker list is not, unless the developer steers the model to a listed tool or asks the security engineer to widen the list. Every run waits about a minute for the catalog and costs about $0.22 to $0.25, against $0.0098 and $0.0185 for the deny-execute act's runs in code mode.
 </Seat>
 
 **The takeaway:** with one tool per operation the policy can allow reads and refuse the logs by name, but a list of names refuses whatever tool the model picks that nobody listed.
 
-<Measure act="tool-allowlist" task="logs (last hour)" turns={3} tokens="248,292 in, 1,426 out" cost="$0.2357" wall="82 s" build="pkg" />
-<Measure act="tool-allowlist" task="allowed" turns={4} tokens="241,478 in, 1,076 out" cost="$0.2278" wall="80 s" build="pkg" />
-<Measure act="tool-allowlist" task="steering sentence" turns={3} tokens="239,979 in, 787 out" cost="$0.2188" wall="78 s" build="pkg" />
+<Measure act="tool-allowlist" task="logs (last hour)" turns={4} tokens="253,633 in, 963 out" cost="$0.2537 (over the $0.25 cap)" wall="79.7 s" build="fork 535307a (Claude Code 2.1.331, 2026-11-24)" />
+<Measure act="tool-allowlist" task="allowed" turns={4} tokens="247,816 in, 1,068 out" cost="$0.2253" wall="81.8 s" build="fork 535307a (Claude Code 2.1.331, 2026-11-24)" />
+<Measure act="tool-allowlist" task="steering sentence" turns={3} tokens="246,079 in, 815 out" cost="$0.2201" wall="77.5 s" build="fork 535307a (Claude Code 2.1.331, 2026-11-24)" />
 
-One run each, headless, on the earlier local build `pkg` with the kit's six-tool rule; On the workshop's build (`pkg-fix`), only the steering sentence was run as a paid run, twice, with your file as this page builds it: 3 turns and USD 0.2218 and 0.2217 as Claude Code reported them; tokens and wall time were not recorded. The logs and allowed tasks were not run as paid runs on `pkg-fix`. About 60 seconds of each wall time is the staging wait. See [Builds and gaps](/results/builds-and-gaps/) for the builds.
+One run each, headless, on 2026-11-24, with the fork build at commit 535307a and Claude Code 2.1.331, with `--max-budget-usd 0.25`. Input tokens count uncached, cache-write and cache-read tokens together. About 3,500 of them are the pack's system prompt ([Inside the pack](/part-2/inside-the-pack/)). About 65 seconds of each wall time is the staging wait. See [Builds and gaps](/results/builds-and-gaps/) for the builds.
 
 ## Clean up
 
@@ -445,6 +511,7 @@ rm -r "$BOX_HOME/storage/ws/default/agent/config/projects"
 
 ## What to remember
 
+- Part 4 runs on the fork build: put `$HOME/box-build` first on the `PATH`, and `box --version` prints `box 0.1.0`.
 - `?codemode=false` in the MCP config file switches the server; the profile does not change.
 - Raise `MCP_TIMEOUT` in `[agent.env]`, or Claude Code starts before Box has staged the catalog and has no tools.
 - An allow-list is `forbid` on `mcp:call` with `when` (this server, tool calls) and `unless` (`has tool` and the list `.contains` it). It loads at start.

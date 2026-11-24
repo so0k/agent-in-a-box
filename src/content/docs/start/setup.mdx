@@ -1,6 +1,6 @@
 ---
 title: "One-time set-up"
-description: "The tools, the three secrets in the keychain, shell variables, the Box home and the workspace."
+description: "Box 0.3.0 from its release, the three secrets in the keychain, shell variables, the Box home and the workspace."
 sidebar:
   label: "Set-up"
   order: 5
@@ -11,15 +11,17 @@ import { Aside, FileTree, Steps } from '@astrojs/starlight/components';
 
 <PartProgress current="start/setup" />
 
-This page prepares the one terminal you keep open for the whole workshop: the box build on your `PATH`, the three secrets in the macOS keychain and in shell variables, a Box home of its own, telemetry off, and the workspace folder with its first file. After it you will know where each secret lives at every moment, and why the folders are where they are. Part 1 starts from exactly this state.
+On this page we prepare the one terminal you keep open for the whole workshop: Box 0.3.0 on your `PATH`, the three secrets in the macOS keychain and in shell variables, a Box home of its own, telemetry off, and the workspace folder with its first file. After it you will know where each secret lives at every moment, and why the folders are where they are. Part 1 starts from exactly this state.
 
 <Pieces stage={1} caption="This page fills the keychain and the developer's terminal. The secrets go from the keychain into the terminal's variables, never onto a command line or into a file." />
 
 Nothing is new in the picture. This page works on two of its pieces: the macOS keychain (top left) and the developer's terminal beside it.
 
+The runs for this workshop used other folder names; the outputs on these pages show the workshop's folders.
+
 ## Before you start: a clean terminal
 
-Open a new terminal window. The set-up below was proven in a fresh shell with nothing inherited. Two variables in particular would change every run if your shell already sets them: `ANTHROPIC_BASE_URL` changes where Claude Code sends its model calls, and `ANTHROPIC_MODEL` changes which model it uses.
+Open a new terminal window. Two variables would change every run if your shell already sets them: `ANTHROPIC_BASE_URL` changes where Claude Code sends its model calls, and `ANTHROPIC_MODEL` changes which model it uses.
 
 <Command what="Prints the two variables if they are set; prints nothing if they are not.">
 
@@ -33,130 +35,145 @@ printenv ANTHROPIC_BASE_URL ANTHROPIC_MODEL
 
 <Expect>Nothing is printed. If a line appears, open a terminal where your shell's start-up files do not set it, or remove it for this terminal with `unset` and the variable's name.</Expect>
 
-## Build the box CLI from source
+The Claude Code pack's file lists `ANTHROPIC_MODEL` among the variables it passes from your shell into the box, and does not list `ANTHROPIC_BASE_URL`. Whether the pack passes these two into the box was not checked in a run.
 
-Iteration 1 below puts the folder `$HOME/box-build` on your `PATH`, so the build must be there first. You need the commands in this section only if you do not already have the workshop's build in that folder.
+## Get Box 0.3.0
 
-<Aside type="caution" title="Derived, not run">
-
-The build commands below were worked out from the build record of the workshop's build (the author's notes, not published) and were not run for this site. The clone command is new and was not run for this site either.
-
-The fix is not in upstream Box. The clone fetches the branch `bugfix/mcp-shared-definitions-workshop` of the fork `so0k/box`: upstream commit `c70fec5` plus the fix. The site was measured on a build of the same commit with an earlier, uncommitted round of this fix, so a build from the branch is not byte-identical to it; whether it behaves the same in the acts was not checked. The same fix on current upstream main is the branch `bugfix/mcp-shared-definitions`. Upstream release v0.3.0 and upstream main still have the bug as of 2026-11-24, so the per-endpoint catalog act needs the fork build. The site's measurements were not repeated on v0.3.0 or on current main.
-
-</Aside>
-
-<details>
-<summary>The build commands, one at a time</summary>
-
-Work in an empty folder in your home (not under `/tmp`). You need git, mise (for the Rust toolchain) and a network connection for Rust's packages.
+We download the release archive for Apple silicon with `gh`, check it against the release's checksum list, and unpack it into a folder of its own. No install step is needed: the binary runs where it is unpacked.
 
 <Steps>
 
-1. <Command what="Downloads the Box source with the fix, from the fork's workshop branch.">
+1. <Command what="Makes a folder for the downloaded files.">
 
    ```sh
-   git clone --branch bugfix/mcp-shared-definitions-workshop https://github.com/so0k/box.git box-src
+   mkdir -p "$HOME/box-download"
    ```
 
-   <Flag name="--branch bugfix/mcp-shared-definitions-workshop">Checks out this branch after the download: upstream commit `c70fec5` plus the fix.</Flag>
-   <Flag name="https://github.com/so0k/box.git">The fork of `strands-agents/box` that holds the fix.</Flag>
-   <Flag name="box-src">The folder to clone into.</Flag>
+   <Flag name="-p">Gives no error if the folder already exists.</Flag>
 
    </Command>
 
-2. <Command what="Moves into the downloaded source folder. Every command below runs from here.">
+2. <Command what="Downloads the box CLI archive for Apple silicon and the checksum list from the v0.3.0 release.">
 
    ```sh
-   cd box-src
+   gh release download v0.3.0 --repo strands-agents/box --pattern 'box-cli-v0.3.0-aarch64-apple-darwin.tar.gz' --pattern 'SHA256SUMS.txt' --dir "$HOME/box-download"
    ```
 
-   <Flag name="box-src">The folder `git clone` just made.</Flag>
+   <Flag name="release download v0.3.0">Downloads files attached to the release with the tag `v0.3.0`.</Flag>
+   <Flag name="--repo strands-agents/box">The repository the release belongs to.</Flag>
+   <Flag name="--pattern '...'">One file each: the box CLI archive for Apple silicon (`aarch64-apple-darwin`), and the list of checksums of every file in the release.</Flag>
+   <Flag name='--dir "$HOME/box-download"'>Where the files go. The measured run used another folder; the command is otherwise the same.</Flag>
 
    </Command>
 
-3. <Command what="Builds the box CLI and its two helper programs with a pinned Rust toolchain.">
+3. <Command what="Prints the published checksums for the Apple silicon archives.">
 
    ```sh
-   MACOSX_DEPLOYMENT_TARGET=15.0 CARGO_HTTP_TIMEOUT=300 mise x rust@1.98.1 -- \
-     cargo build --release --locked -p strands-box-cli -p strands-box -p strands-box-containment \
-     --bin box --bin strands-box --bin strands-box-sock-alias --bin strands-box-contain-trampoline
+   grep aarch64-apple-darwin "$HOME/box-download/SHA256SUMS.txt"
    ```
 
-   <Flag name="MACOSX_DEPLOYMENT_TARGET=15.0">The oldest macOS the binaries are built for, as the build record says.</Flag>
-   <Flag name="CARGO_HTTP_TIMEOUT=300">Gives slow package downloads up to 300 seconds.</Flag>
-   <Flag name="mise x rust@1.98.1 --">Runs the build with Rust 1.98.1, the version the build record names. Whether another version builds the same was not checked.</Flag>
-   <Flag name="--release">An optimised build.</Flag>
-   <Flag name="--locked">Refuses to change `Cargo.lock`, so the dependencies are exactly the source's.</Flag>
-   <Flag name="-p ... --bin ...">The packages and programs to build. `strands-box` (Box Core's own command) is built too, but the workshop does not use it.</Flag>
+   <Flag name="aarch64-apple-darwin">The text to look for: only the lines of the Apple silicon files.</Flag>
 
    </Command>
 
-4. <Command what="Makes the folder the workshop uses for the build.">
+   <Expect>
 
-   ```sh
-   mkdir -p "$HOME/box-build/resources"
+   ```text
+   bc077119fe6b9c4ff84dffea4f895bd23531d7eda36c965aa5503131c69aaa70  box-cli-v0.3.0-aarch64-apple-darwin.tar.gz
+   6c3365468b73a71551f38a1428b5658f2197f016623f6d3ecb8cbb50ea489e77  box-v0.3.0-aarch64-apple-darwin.tar.gz
    ```
 
-   <Flag name="-p">Makes `box-build` and `resources` inside it in one step, and gives no error if they already exist.</Flag>
-   <Flag name='"$HOME/box-build/resources"'>The build folder, with the `resources` folder the shipped files go into below.</Flag>
+   </Expect>
+
+   The second line is Box Core's own archive, which the workshop does not need.
+
+4. <Command what="Computes the checksum of the archive you downloaded.">
+
+   ```sh
+   shasum -a 256 "$HOME/box-download/box-cli-v0.3.0-aarch64-apple-darwin.tar.gz"
+   ```
+
+   <Flag name="-a 256">Uses SHA-256, the checksum the list holds.</Flag>
 
    </Command>
 
-5. <Command what="Copies the box binary and its two helpers into the build folder.">
+   <Expect>
 
-   ```sh
-   cp target/release/box target/release/strands-box-sock-alias target/release/strands-box-contain-trampoline "$HOME/box-build/"
+   ```text
+   bc077119fe6b9c4ff84dffea4f895bd23531d7eda36c965aa5503131c69aaa70  <your-home>/box-download/box-cli-v0.3.0-aarch64-apple-darwin.tar.gz
    ```
 
-   <Flag name="strands-box-sock-alias, strands-box-contain-trampoline">The two helpers must sit beside `box`. The trampoline applies the macOS sandbox and then becomes the program it starts.</Flag>
+   </Expect>
+
+   The two hashes must match. If they do not, delete the download and do not unpack it.
+
+5. <Command what="Makes the folder the release is unpacked into.">
+
+   ```sh
+   mkdir -p "$HOME/box-0.3.0"
+   ```
+
+   <Flag name='"$HOME/box-0.3.0"'>The folder every page of this workshop uses for the release.</Flag>
 
    </Command>
 
-6. <Command what="Copies the shipped packs, starters, policy starters and the agent guide beside the binary.">
+6. <Command what="Unpacks the archive into that folder.">
 
    ```sh
-   cp -R resources/config.toml resources/editing-box-profile.md resources/packs resources/plugins resources/policies resources/starters "$HOME/box-build/resources/"
+   tar xzf "$HOME/box-download/box-cli-v0.3.0-aarch64-apple-darwin.tar.gz" -C "$HOME/box-0.3.0"
    ```
 
-   <Flag name="-R">Copies folders with everything in them.</Flag>
-   <Flag name="$HOME/box-build/resources/">The CLI looks for its shipped files in a `resources/` folder beside the binary, the way a release package lays them out.</Flag>
+   <Flag name="xzf">`x` extracts, `z` unzips the gzip layer, `f` names the archive file that follows.</Flag>
+   <Flag name='-C "$HOME/box-0.3.0"'>Unpacks into this folder instead of the current one.</Flag>
 
    </Command>
 
-7. <Command what="Runs the new binary and prints its version. It changes nothing.">
+7. <Command what="Runs the unpacked binary and prints its version. It changes nothing.">
 
    ```sh
-   "$HOME/box-build/box" --version
+   "$HOME/box-0.3.0/box" --version
    ```
 
    <Flag name="--version">Prints the version and exits.</Flag>
 
    </Command>
 
-   It should print `box 0.1.0`.
+   <Expect>
+
+   ```text
+   box 0.3.0
+   ```
+
+   </Expect>
 
 </Steps>
 
-</details>
+The folder now holds:
 
-<ReadMore href="/results/builds-and-gaps/" source="This workshop">Builds and gaps: what this build is, and what a released Box still lacks</ReadMore>
+- **The programs:** `box` and its two helpers, `strands-box-sock-alias` and `strands-box-contain-trampoline`, side by side.
+- **`release.json`:** the version, 0.3.0, and the commit it was built from.
+- **`resources/`:** the shipped packs, the starters, the policy starters, two plugins, and the guide for coding agents (`editing-box-profile.md`).
+
+The Box docs also offer an installer. It was not run for this workshop.
+
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/install/" source="Box docs">Install the box CLI</ReadMore>
 
 ## The set-up, step by step
 
-<Iteration n={1} title="Put the workshop's box build first on the PATH">
+<Iteration n={1} title="Put Box 0.3.0 first on the PATH">
 
-**What we add.** The folder of the local box build, in front of every other folder the shell searches for commands.
+**What we add.** The folder of the unpacked release, in front of every other folder the shell searches for commands.
 
 **The run.**
 
-<Command what="Puts the workshop's box build in front of everything else on the PATH, for this terminal.">
+<Command what="Puts Box 0.3.0 in front of everything else on the PATH, for this terminal.">
 
 ```sh
-export PATH="$HOME/box-build:$PATH"
+export PATH="$HOME/box-0.3.0:$PATH"
 ```
 
 <Flag name="export">Makes the variable visible to every program started from this terminal, not only to the shell itself.</Flag>
-<Flag name="$HOME/box-build">The folder that holds the build's `box` binary and its helpers ([requirements](/start/requirements/#the-box-cli-a-local-build)).</Flag>
+<Flag name="$HOME/box-0.3.0">The folder that holds the release's `box` binary and its helpers.</Flag>
 <Flag name=":$PATH">Keeps the folders that were already on the `PATH`, after the new one.</Flag>
 
 </Command>
@@ -173,10 +190,10 @@ command -v box
 
 </Command>
 
-<Expect>
+<Expect title="What you should see (not run for this workshop)">
 
 ```text
-<your-home>/box-build/box
+<your-home>/box-0.3.0/box
 ```
 
 </Expect>
@@ -194,18 +211,20 @@ box --version
 <Expect>
 
 ```text
-box 0.1.0
+box 0.3.0
 ```
 
 </Expect>
 
+The PATH line and `command -v` were not run for this workshop: the runs called the binary by its full path. `box --version` printing `box 0.3.0` was measured.
+
 <Why>
 
-The workshop needs this one build (it carries a fix a released Box does not have yet). Putting its folder first means a plain `box` in every later command is this build, even if you also have a Box release installed. On the machine this site was written on, an installed `box` 0.1.8 also sits in `~/.local/bin`; with this line `command -v box` printed the build's path.
+The shell runs the first `box` it finds on the `PATH`, so the folder you put first wins. With this line, a plain `box` in every later command is the release, even if another `box` is installed elsewhere. Part 4 uses the same trick to switch to the fork build, and Part 5 switches back.
 
 <Fragment slot="alternative">
 
-Typing the full path `"$HOME/box-build/box"` in every command also works, but makes every command longer. Installing the build over a released `box` would change your other Box work.
+Typing the full path `"$HOME/box-0.3.0/box"` in every command also works, but makes every command longer.
 
 </Fragment>
 
@@ -227,9 +246,9 @@ You do this once per machine, not once per terminal.
 
 **The run.** One command per secret. Each one asks you for the value; paste it at the prompt.
 
-<Aside type="note" title="Not run for this site">
+<Aside type="note" title="Not run for this workshop">
 
-The three `add-generic-password` commands below were not run for this site: the items already existed on the machine it was written on.
+The three `add-generic-password` commands below were not run for this workshop: the items already existed on the machine it was written on.
 
 </Aside>
 
@@ -312,7 +331,7 @@ The keychain keeps the secrets encrypted on disk and out of every file you might
 export ANTHROPIC_API_KEY="$(security find-generic-password -s anthropic-api-key -a box-exec-proxy-poc -w)"
 ```
 
-<Flag name="ANTHROPIC_API_KEY">The variable Claude Code reads its API key from. In the box acts the profile also names it, so Box knows which value to keep for itself.</Flag>
+<Flag name="ANTHROPIC_API_KEY">The variable Claude Code reads its API key from. In the box acts the Anthropic pack also names it, so Box knows which value to keep for itself.</Flag>
 <Flag name="$( ... )">Runs the command inside and puts what it prints into the variable, so the value never appears on the screen.</Flag>
 <Flag name="-w">On `find-generic-password`, prints only the secret's value. Here it goes into the variable, not to the screen.</Flag>
 
@@ -405,7 +424,7 @@ echo -n "$BOX_HOME" | wc -c
 
 </Command>
 
-<Expect title="What you should see (on the machine this site was written on)">
+<Expect title="What you should see (on the machine this workshop was written on, measured earlier)">
 
 ```text
       25
@@ -417,13 +436,17 @@ The number must be 65 or less.
 
 <Why>
 
-**A folder of its own.** Nothing you already have in `~/.strands/box` (the default) or `~/.box` (the home of the older 0.1.x CLI) is read or changed, and you can delete the whole workshop with one folder.
+**A folder of its own, with a short path.** Nothing in the default `~/.strands/box` is read or changed, and one folder holds the whole workshop. Each run's socket path is the Box home plus 38 bytes (derived), and macOS allows 103, so the Box home may be at most 65 bytes. Box 0.3.0 still refuses a longer one (measured on 2026-11-24, an 88-byte home):
 
-**A short path.** Each run gets a socket, a file through which the agent's side of the box talks to Box, at `<BOX_HOME>/r/b-<16 hex>/box/run/box.sock`. macOS limits a socket path to 103 bytes, and Box refuses to start a run whose socket path is longer. The socket path is the Box home plus 38 bytes, so the Box home may be at most 65 bytes. That limit is worked out from the path, not stated in Box's docs; a run with a 67-byte home was refused on this machine, and 59 and 62 bytes worked (see [Builds and gaps](/results/builds-and-gaps/)). `$HOME/box-ws` fits for any normal user name.
+```text
+strands-box: error: unsafe box directory <BOX_HOME>/r/b-1a918d012f16a605/box: its broker socket path exceeds the platform limit
+```
+
+A short symbolic link does not help, because Box follows it to the long real path (measured).
 
 <Fragment slot="alternative">
 
-Leaving `BOX_HOME` unset uses `~/.strands/box`, shared with any other Box work you do. A long folder name deep in your home can pass every other check and only fail when the first run starts.
+Leaving `BOX_HOME` unset uses `~/.strands/box`, shared with any other Box work you do, and too long under a deep home folder.
 
 </Fragment>
 
@@ -462,7 +485,7 @@ box telemetry status
 
 </Command>
 
-<Expect>
+<Expect title="What you should see (measured earlier on a local build; not run for this workshop)">
 
 ```text
 Telemetry is off (set by BOX_TELEMETRY).
@@ -472,13 +495,11 @@ Telemetry is off (set by BOX_TELEMETRY).
 
 <Why>
 
-**What it would send.** Only `box run` sends events: one at the start, a count of policy decisions about once a minute, and one at the end, to `https://telemetry.strandsagents.com/box/ping`. They hold a random installation id, a run id, the build, a hash of `profile.toml` and the names of the shipped packs it uses, whether it names policy files, custom packs or MCP servers, how start-up went, how many times each kind of action was permitted or denied, and how the run ended. They do not hold prompts, the agent's output, file contents or paths, credentials, commands, profile or policy text, or MCP tool names and arguments. They are sent from outside the box, so your profile's network rules do not apply to them. The data is kept for 13 months. (All of this is from Box's `CLI_TELEMETRY.md`.)
-
-**Why off here.** The workshop's runs are experiments, and the variable keeps everything inside the Box home: with it set, no `~/.strands` folder appeared on this machine.
+The box CLI sends a few usage events about each run, never prompts, output or credentials. The workshop's runs are experiments, so we turn it off; every run for this workshop had `BOX_TELEMETRY=0`.
 
 <Fragment slot="alternative">
 
-Leaving telemetry on is a fair choice: it helps the Box team see where the CLI fails, and it sends none of the content above. `box telemetry off` saves the choice for good, but writes it to `~/.strands/box/installation.toml`, outside the Box home. `DO_NOT_TRACK=1` also turns it off.
+Leave it on to help the Box team, or save the choice with `box telemetry off`, which writes outside the Box home.
 
 </Fragment>
 
@@ -537,7 +558,7 @@ pwd
 
 <Fragment slot="alternative">
 
-Any folder in your home works if it is outside the Box home. A real repository of yours would also work, but then the agent could read its files once Part 2 gives it access to the project; an almost empty folder keeps the acts about Cloudflare.
+Any folder in your home works if it is outside the Box home. A real repository of yours would also work, but then the agent could read its files, because the profile of Part 2 gives it read access to the project; an almost empty folder keeps the acts about Cloudflare.
 
 </Fragment>
 
@@ -566,10 +587,17 @@ Any folder in your home works if it is outside the Box home. A real repository o
 - `"url"` is Cloudflare's server. Without a query string it runs in code mode (Part 1).
 - `"headers"` adds the token to every request. `${CLOUDFLARE_MCP_TOKEN}` is a placeholder: Claude Code fills it from its own environment when it connects, so the file holds no secret.
 
-With this file saved, the two folders in your home hold this much:
+With this file saved, your home holds the workshop's folders:
 
 <FileTree>
 
+- box-download/ the archive and SHA256SUMS.txt
+- **box-0.3.0/** the unpacked release
+  - box
+  - strands-box-contain-trampoline
+  - strands-box-sock-alias
+  - release.json
+  - resources/
 - box-ws/ the Box home, still empty
 - leaderboard-ops/ the workspace, where the agent starts
   - **cloudflare-code-mode.json** you edit this
@@ -596,15 +624,140 @@ The token written into the file would leave the secret on disk. The same JSON pa
 
 </Iteration>
 
+## The fork build for Part 4
+
+Box 0.3.0 has a bug that refuses the one-tool-per-operation server of Part 4 (read from the source and from issue #637; Part 4 was not run on 0.3.0 for this workshop). Part 4 therefore runs on a build of the fork branch `bugfix/mcp-shared-definitions` of `so0k/box`, measured at commit `535307a`. The fix is filed upstream as issue [#637](https://github.com/strands-agents/box/issues/637), with pull request [#638](https://github.com/strands-agents/box/pull/638), open as read on 2026-11-24; until a release has it, you build it yourself. You need this section only before Part 4.
+
+<details>
+<summary>The build commands, one at a time</summary>
+
+You need git, rustup ([requirements](/start/requirements/#rust-for-the-part-4-build-only)) and a network connection for Rust's packages.
+
+<Aside type="note" title="Not run for this workshop">
+
+The clone and checkout commands were not run for this workshop: the measured build checked out `535307a` from a local clone with `git worktree add --detach`. The build, copy and version commands were run as shown.
+
+</Aside>
+
+<Steps>
+
+1. <Command what="Downloads the Box source with the fix, from the fork's branch.">
+
+   ```sh
+   git clone --branch bugfix/mcp-shared-definitions https://github.com/so0k/box.git "$HOME/box-src"
+   ```
+
+   <Flag name="--branch bugfix/mcp-shared-definitions">Checks out the fork's branch with the fix after the download.</Flag>
+   <Flag name="https://github.com/so0k/box.git">The fork of `strands-agents/box` that holds the fix.</Flag>
+   <Flag name='"$HOME/box-src"'>The folder to clone into.</Flag>
+
+   </Command>
+
+2. <Command what="Moves the checkout to the commit the workshop was measured on.">
+
+   ```sh
+   git -C "$HOME/box-src" checkout --detach 535307a
+   ```
+
+   <Flag name='-C "$HOME/box-src"'>Runs git as if started in that folder.</Flag>
+   <Flag name="checkout --detach 535307a">Checks out exactly this commit, not the branch's newest one.</Flag>
+
+   </Command>
+
+3. <Command what="Moves into the source folder. Every command below runs from here.">
+
+   ```sh
+   cd "$HOME/box-src"
+   ```
+
+   </Command>
+
+4. <Command what="Builds the box CLI and its two helper programs.">
+
+   ```sh
+   MACOSX_DEPLOYMENT_TARGET=15.0 CARGO_HTTP_TIMEOUT=300 cargo build --release --locked \
+     -p strands-box-cli -p strands-box -p strands-box-containment \
+     --bin box --bin strands-box --bin strands-box-sock-alias --bin strands-box-contain-trampoline
+   ```
+
+   <Flag name="MACOSX_DEPLOYMENT_TARGET=15.0">The oldest macOS the binaries are built for.</Flag>
+   <Flag name="CARGO_HTTP_TIMEOUT=300">Gives slow package downloads up to 300 seconds.</Flag>
+   <Flag name="cargo">Rustup's `cargo`. The source's `rust-toolchain.toml` pins Rust 1.98.1, and rustup picks that version (measured).</Flag>
+   <Flag name="--release">An optimised build.</Flag>
+   <Flag name="--locked">Refuses to change `Cargo.lock`, so the dependencies are exactly the source's.</Flag>
+   <Flag name="-p ... --bin ...">The packages and programs to build. `strands-box` (Box Core's own command) is built too, but the workshop does not use it.</Flag>
+   <Flag name="\">Continues the command on the next line. It is still one command.</Flag>
+
+   </Command>
+
+   The measured build took 1 minute 36 seconds, with Rust's packages already downloaded; a first build downloads them too. Running the build through mise instead (`mise x rust@1.98.1 -- cargo build ...`) was not run for this workshop.
+
+5. <Command what="Makes the folder the workshop uses for the fork build.">
+
+   ```sh
+   mkdir -p "$HOME/box-build/resources"
+   ```
+
+   <Flag name="-p">Makes `box-build` and `resources` inside it in one step, and gives no error if they already exist.</Flag>
+
+   </Command>
+
+6. <Command what="Copies the box binary and its two helpers into the build folder.">
+
+   ```sh
+   cp target/release/box target/release/strands-box-sock-alias target/release/strands-box-contain-trampoline "$HOME/box-build/"
+   ```
+
+   <Flag name="strands-box-sock-alias, strands-box-contain-trampoline">The two helpers must sit beside `box`, as they do in the release archive.</Flag>
+
+   </Command>
+
+7. <Command what="Copies the shipped packs, starters, policy starters and the agent guide beside the binary.">
+
+   ```sh
+   cp -R resources/config.toml resources/editing-box-profile.md resources/packs resources/plugins resources/policies resources/starters "$HOME/box-build/resources/"
+   ```
+
+   <Flag name="-R">Copies folders with everything in them.</Flag>
+   <Flag name="$HOME/box-build/resources/">The CLI looks for its shipped files in a `resources/` folder beside the binary, the way the release archive lays them out.</Flag>
+
+   </Command>
+
+8. <Command what="Runs the new binary and prints its version. It changes nothing.">
+
+   ```sh
+   "$HOME/box-build/box" --version
+   ```
+
+   <Flag name="--version">Prints the version and exits.</Flag>
+
+   </Command>
+
+   <Expect>
+
+   ```text
+   box 0.1.0
+   ```
+
+   </Expect>
+
+   The fork prints `box 0.1.0` because a local build is not stamped with a release version. Its Claude Code pack and starter are identical to those of 0.3.0 (measured).
+
+</Steps>
+
+</details>
+
+<ReadMore href="/results/builds-and-gaps/" source="This workshop">Builds and gaps: what the fork build is, and what a released Box still lacks</ReadMore>
+
 ## In every new terminal
 
-The exports last only as long as the terminal. If you open a new one, type steps 1, 3, 4 and 5 again and `cd` into the workspace. Here are those lines in one place, to copy one at a time:
+The exports last only as long as the terminal. If you open a new one, type steps 1, 3, 4 and 5 again and `cd` into the workspace. Here are those lines in one place, to copy one at a time. In Part 4, add the fork's line `export PATH="$HOME/box-build:$PATH"` after them, as [the tool-allowlist act](/part-4/tool-allowlist/) shows.
 
 <details>
 <summary>The lines for a new terminal</summary>
 
 ```sh
-export PATH="$HOME/box-build:$PATH"
+export PATH="$HOME/box-0.3.0:$PATH"
 ```
 
 ```sh
@@ -635,23 +788,26 @@ cd "$HOME/leaderboard-ops"
 
 <Aside type="note" title="Not checked">
 
-- The three `security add-generic-password` commands (the items already existed on the machine this site was written on), and what their prompt looks like.
+- The three `security add-generic-password` commands (the items already existed on the machine this workshop was written on), and what their prompt looks like.
 - Creating the keychain items in the Keychain Access app instead.
-- The build-from-source commands.
+- The official installer, a browser download of the archive, and the `PATH` lines themselves (the runs called each binary by its full path).
+- The fork's clone and checkout commands, and the build through mise.
 - Any Box home other than the lengths named above.
 
 </Aside>
 
 ## What to remember
 
-- The secrets live in the keychain, under account `box-exec-proxy-poc`, and reach the terminal only through `$(security ... -w)`.
-- `BOX_HOME="$HOME/box-ws"`: a home of its own, short enough for the 103-byte socket path.
-- `BOX_TELEMETRY=0` turns usage telemetry off for the terminal without writing anything outside the Box home.
-- The workspace `~/leaderboard-ops` is outside the Box home and not under `/tmp`.
-- `cloudflare-code-mode.json` holds a placeholder, never the token.
+- **Box 0.3.0:** downloaded with `gh`, checked against `SHA256SUMS.txt`, unpacked to `~/box-0.3.0` and put first on the `PATH`.
+- **The secrets:** in the keychain, under account `box-exec-proxy-poc`, and reach the terminal only through `$(security ... -w)`.
+- **The Box home:** `BOX_HOME="$HOME/box-ws"`, a home of its own, short enough for the 103-byte socket path.
+- **Telemetry:** `BOX_TELEMETRY=0` turns it off for the terminal.
+- **The workspace:** `~/leaderboard-ops`, outside the Box home and not under `/tmp`; `cloudflare-code-mode.json` holds a placeholder, never the token.
+- **Part 4:** a fork build in `~/box-build`, made once before that part.
 
 ## Read more
 
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/install/" source="Box docs">Install, upgrade and build from source</ReadMore>
 <ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/cli/" source="Box docs">The box command reference, including its environment variables</ReadMore>
 <ReadMore href="https://strandsagents.com/docs/user-guide/box/quickstart/" source="Box docs">Get started with the box CLI and Claude Code</ReadMore>
 <ReadMore href="https://code.claude.com/docs/en/settings" source="Claude Code docs">Claude Code settings and environment variables</ReadMore>

@@ -125,15 +125,15 @@ Reading time was not measured. What was measured is how long one run of each act
 
 | Part | Pages | Act | Wall time of one run, as measured |
 |---|---|---|---|
-| 1 | 2 | token-scope | 10 s (allowed task), 13 s (logs task); no box, Claude Code 2.1.325 |
-| 2 | 5 | opaque-execute | 22 s (logs task) |
-| 3 | 2 | deny-execute | 17 s (logs task) |
-| 4 | 4 | tool-allowlist, argument-rules | 75 s to 85 s per run; most of it is Box preparing the server's 3,053 tools before the agent may use them |
-| 5 | 3 | request-rules | 10 s (allowed task), 19 s (logs task) |
+| 1 | 2 | token-scope | 10 s (allowed task), 21 s (logs task); no box, Claude Code 2.1.331 |
+| 2 | 6 | opaque-execute | 16 s (logs task) |
+| 3 | 2 | deny-execute | 13 s (logs task) |
+| 4 | 4 | tool-allowlist, argument-rules | 78 s to 82 s per run; most of it is Box preparing the server's 3,053 tools before the agent may use them |
+| 5 | 3 | request-rules | 8 s (allowed task), 10 s (logs task) |
 
 </div>
 
-The times for the five boxed acts come from local box builds made before a released Box had what this workshop needs (the build this site uses among them), with Claude Code 2.1.330. [Builds and gaps](/results/builds-and-gaps/) explains the builds.
+The times for the five boxed acts come from Box 0.3.0 and, for Part 4, the fork build at commit 535307a, with Claude Code 2.1.331, one run each on 2026-11-24. [Builds and gaps](/results/builds-and-gaps/) explains the builds.
 
 ## What to remember
 

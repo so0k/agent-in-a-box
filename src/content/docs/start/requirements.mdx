@@ -1,6 +1,6 @@
 ---
 title: "Requirements"
-description: "What you need before you start, with a command to check each item."
+description: "What you need before you start, with a command to check each item: a Mac, Box 0.3.0, Claude Code, Node, the exec proxy, an Anthropic key and two Cloudflare tokens."
 sidebar:
   label: "Requirements"
   order: 4
@@ -11,15 +11,15 @@ import { Aside } from '@astrojs/starlight/components';
 
 <PartProgress current="start/requirements" />
 
-This page lists what you need to run the acts yourself, with one command to check each item. You only need all of it to run the acts; to follow the explanations, a browser is enough, because every page shows the real output of the runs made for this workshop.
+On this page we list what you need to run the acts yourself, with one command to check each item. You need all of it only to run the acts. To follow the explanations, a browser is enough, because every page shows the real output of the runs made for this workshop.
 
 <Pieces stage={1} caption="Everything on this picture is something you need: a Mac with a terminal and a keychain, Claude Code, an Anthropic API key, and a Cloudflare account with an app on it." />
 
 Nothing is new in the picture yet. This page is about the pieces of stage 1 and the box CLI that Part 2 adds.
 
-## What was used to write this site
+## What was used
 
-Every check below was run on one machine on 2026-11-22: macOS 26.7.1 on Apple silicon, Claude Code 2.1.330, Node 22.23.4, and the local box build described below. Other versions were not checked.
+The runs for this workshop were made on one machine on 2026-11-24, with Claude Code 2.1.331, Node 22.23.4, the released Box 0.3.0, and for Part 4 a build of a Box fork at commit `535307a`. The macOS version was not recorded that day; it was 26.7.1 when it was checked on 2026-11-22. Other versions were not checked.
 
 ## A Mac with Apple silicon
 
@@ -53,7 +53,7 @@ sw_vers -productVersion
 
 </Command>
 
-<Expect>
+<Expect title="What you should see (checked on 2026-11-22)">
 
 ```text
 26.7.1
@@ -61,23 +61,23 @@ sw_vers -productVersion
 
 </Expect>
 
-The box build used here was compiled for macOS 15.0 and later (`MACOSX_DEPLOYMENT_TARGET=15.0` in its build record). It was run on macOS 26.7.1 only; earlier versions were not checked.
+The fork build for Part 4 is compiled for macOS 15.0 and later (`MACOSX_DEPLOYMENT_TARGET=15.0` in its build command). The macOS version was checked as 26.7.1 on 2026-11-22 and not recorded on 2026-11-24; earlier versions were not checked.
 
 <ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/macos-requirements/" source="Box docs">macOS requirements</ReadMore>
 
-## The box CLI: a local build
+## The box CLI
 
-This workshop needs one fix to the box CLI that is not in a released Box yet. Without it, Box refuses every tool of Cloudflare's one-tool-per-operation server in Part 4, because 441 of its 3,053 tools describe their arguments in ways Box could not read ([Builds and gaps](/results/builds-and-gaps/)). So the site uses **one local build**, made from the public Box source (`strands-agents/box` main at commit `c70fec5`) plus that fix. The fix is published as the branch `bugfix/mcp-shared-definitions-workshop` of the fork `so0k/box`, in a later round than the one the site was measured on ([Set-up](/start/setup/) says what that means). Upstream release v0.3.0 and upstream main still have the bug as of 2026-11-24. It prints `box 0.1.0`; that version string is not stamped for local builds and does not mean an old release.
+Parts 2, 3 and 5 use the released Box 0.3.0, which you download and unpack in [set-up](/start/setup/). Part 4 needs a build of the fork branch `bugfix/mcp-shared-definitions` of `so0k/box`, measured at commit `535307a`: Box 0.3.0 has a bug that refuses Cloudflare's one-tool-per-operation server (read from the source and from issue #637; Part 4 was not run on 0.3.0 for this workshop), and the fix (upstream issue [#637](https://github.com/strands-agents/box/issues/637), pull request [#638](https://github.com/strands-agents/box/pull/638), open as read on 2026-11-24) is not released yet. Set-up shows both, and [Builds and gaps](/results/builds-and-gaps/) explains the gap.
 
-The site assumes the build sits in `$HOME/box-build`: the `box` binary, its two helper programs `strands-box-sock-alias` and `strands-box-contain-trampoline`, and a `resources/` folder beside them. [Set-up](/start/setup/#build-the-box-cli-from-source) has the build commands, and [Builds and gaps](/results/builds-and-gaps/) explains the build and everything a released Box still lacks.
+After set-up, this command checks the release:
 
-<Command what="Runs the workshop's box build and prints its version.">
+<Command what="Runs the unpacked Box 0.3.0 and prints its version.">
 
 ```sh
-"$HOME/box-build/box" --version
+"$HOME/box-0.3.0/box" --version
 ```
 
-<Flag name="$HOME/box-build/box">The full path to the build, so that another `box` on your `PATH` (an installed release, for example) is not the one that answers.</Flag>
+<Flag name="$HOME/box-0.3.0/box">The full path to the unpacked release, so that another `box` on your `PATH` is not the one that answers.</Flag>
 <Flag name="--version">Prints the version and exits.</Flag>
 
 </Command>
@@ -85,14 +85,56 @@ The site assumes the build sits in `$HOME/box-build`: the `box` binary, its two 
 <Expect>
 
 ```text
-box 0.1.0
+box 0.3.0
 ```
 
 </Expect>
 
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/install/" source="Box docs">Install, upgrade and build from source</ReadMore>
+
+## The GitHub CLI, for the download
+
+Set-up downloads the release with `gh`, the GitHub command line tool, and checks the archive against the release's checksum list.
+
+<Command what="Prints the version of the GitHub CLI.">
+
+```sh
+gh --version
+```
+
+<Flag name="--version">Prints the version and exits.</Flag>
+
+</Command>
+
+<Aside type="note" title="Not run for this workshop">
+
+The output of `gh --version` is not shown: it was not recorded. Whether `gh` needs you to be logged in to download from a public release was not checked for this workshop.
+
+</Aside>
+
+## Rust, for the Part 4 build only
+
+The fork build for Part 4 is compiled from source with Cargo, Rust's build tool, installed through rustup. The source pins its Rust version (1.98.1, in its `rust-toolchain.toml`), and rustup fetches that version by itself. The measured build used rustup's `~/.cargo/bin/cargo`.
+
+<Command what="Prints the version of rustup, the Rust installer.">
+
+```sh
+rustup --version
+```
+
+<Flag name="--version">Prints the version and exits.</Flag>
+
+</Command>
+
+<Aside type="note" title="Not run for this workshop">
+
+The output of `rustup --version` was not recorded, so no output is shown.
+
+</Aside>
+
 ## Claude Code
 
-Claude Code is the agent in every act. The profile you write in Part 2 starts it from `~/.local/bin/claude`, which is where Anthropic's native installer puts it. If yours is elsewhere, you change one path in the profile.
+Claude Code is the agent in every act. Box's Claude Code pack, which Part 2 uses, finds Claude Code on your `PATH`, then in `~/.local/bin`, where Anthropic's native installer puts it. Box then runs the versioned file that the link points to.
 
 <Command what="Prints the path of the claude command your shell finds.">
 
@@ -104,7 +146,7 @@ command -v claude
 
 </Command>
 
-<Expect>
+<Expect title="What you should see (checked on 2026-11-22)">
 
 ```text
 <your-home>/.local/bin/claude
@@ -124,21 +166,23 @@ claude --version
 
 </Command>
 
-<Expect>
+<Expect title="What you should see (inferred, not run for this workshop)">
 
 ```text
-2.1.330 (Claude Code)
+2.1.331 (Claude Code)
 ```
+
+The command was not run on 2026-11-24. The version is read from the path Box resolved for Claude Code, `~/.local/share/claude/versions/2.1.331`.
 
 </Expect>
 
-Your own Claude Code settings, memory and MCP servers are never used: every act runs Claude Code with an empty, throwaway configuration. The acts explain the flags that do this.
+The pack copies parts of your own Claude Code set-up into the box's storage at the first run, such as your `CLAUDE.md` and skills. The acts keep those copies away from the model with Claude Code's `--bare` or `--setting-sources ""` flags; [Inside the pack](/part-2/inside-the-pack/) shows what is copied and what reaches the model.
 
 <ReadMore href="https://code.claude.com/docs/en/cli-reference" source="Claude Code docs">Claude Code CLI reference</ReadMore>
 
 ## Node 22, for the local MCP server in Part 5
 
-Part 5 runs a small MCP server inside the box, the local exec proxy. It is a Node program. The profile names the Node installation by its full path, because inside the box the agent's `PATH` does not include your Node. This site uses Node 22.23.4 installed with mise, a tool version manager; any other installation works if you change the path in the profile (not checked).
+Part 5 runs a small MCP server inside the box, the local exec proxy. It is a Node program. The profile names the Node installation by its full path, because inside the box the agent's `PATH` does not include your Node. This workshop uses Node 22.23.4 installed with mise, a tool version manager; any other installation works if you change the path in the profile (not checked).
 
 <Command what="Prints the folder of the Node 22 installation that mise manages.">
 
@@ -163,7 +207,7 @@ mise where node@22
 
 ## The exec proxy repository, for Part 5
 
-The local exec proxy lives in the public repository [so0k/box-exec-proxy](https://github.com/so0k/box-exec-proxy), in `proxy/`. The site assumes a copy at `$HOME/box-exec-proxy`. The Cloudflare API description the proxy searches, `spec/spec.json`, is not in the repository: the repository's script `tools/fetch-spec.sh` downloads it. The commands in this section were not run for this site.
+The local exec proxy lives in the public repository [so0k/box-exec-proxy](https://github.com/so0k/box-exec-proxy), in `proxy/`. The workshop assumes a copy at `$HOME/box-exec-proxy`. The Cloudflare API description the proxy searches, `spec/spec.json`, is not in the repository: the repository's script `tools/fetch-spec.sh` downloads it. The commands in this section were not run for this workshop.
 
 <Command what="Downloads the exec proxy repository into your home folder.">
 
@@ -211,7 +255,7 @@ ls "$HOME/box-exec-proxy/proxy/exec-proxy" "$HOME/box-exec-proxy/spec/spec.json"
 
 ## An Anthropic API key
 
-Claude Code calls the Anthropic API with an API key. The acts are paid runs on that key. Each act page says what one run cost when it was measured; the most expensive measured run cost USD 0.2357 (the tool-allowlist act, see [Measurements](/results/measurements/)), and every headless run in this workshop carries a cap of USD 0.25. Interactive runs have no money cap in Claude Code.
+Claude Code calls the Anthropic API with an API key. The acts are paid runs on that key. Each act page says what one run cost when it was measured. The most expensive run measured for this workshop cost USD 0.2537 (the tool-allowlist act, see [Measurements](/results/measurements/)), a little over its USD 0.25 cap. The headless commands carry a cap of USD 0.25 in Parts 1, 2, 3 and 5, and USD 0.40 in Part 4; runs with the 0.40 cap were not made for this workshop. Interactive runs have no money cap in Claude Code.
 
 You store the key in the keychain in [set-up](/start/setup/), and the check is there. Whether the key works shows at the first real run; the free checks deliberately use an invalid key.
 
@@ -246,13 +290,13 @@ You store both tokens in the keychain in [set-up](/start/setup/). The MCP token 
 
 ## The sample app (only to run the acts)
 
-The tasks read the Worker `box-poc-workshop` of [the sample app](/start/the-sample-app/): its list entry and its deployments. Its source is in [box-exec-proxy/sample-app](https://github.com/so0k/box-exec-proxy/tree/main/sample-app). You need the app, or a Worker of your own in its place, only to run the acts yourself. You can follow every explanation without it. This site does not teach how to deploy it.
+The tasks read the Worker `box-poc-workshop` of [the sample app](/start/the-sample-app/): its list entry and its deployments. Its source is in [box-exec-proxy/sample-app](https://github.com/so0k/box-exec-proxy/tree/main/sample-app). You need the app, or a Worker of your own in its place, only to run the acts yourself. You can follow every explanation without it. This workshop does not teach how to deploy it.
 
 The check is the token-scope act's allowed task: its answer lists the Workers on the account, and yours should be among them.
 
 ## The account id in the examples
 
-The worked example uses the Cloudflare account id `0123456789abcdef0123456789abcdef`, a stand-in for the real account the site was measured on, and the Worker `box-poc-workshop`. They were verified on that real account only. With your own account, replace them in these places:
+The worked example uses the Cloudflare account id `0123456789abcdef0123456789abcdef`, a stand-in for the real account the workshop was measured on, and the Worker `box-poc-workshop`. They were verified on that real account only. With your own account, replace them in these places:
 
 | Where | What to change | First appears in |
 |---|---|---|
@@ -265,8 +309,9 @@ The argument-rules task also names a second, made-up account id (`fedcba98765432
 
 <Aside type="note" title="Not checked">
 
-- Any macOS version other than 26.7.1, any Intel Mac, any Claude Code version other than 2.1.330, any Node other than 22.23.4.
-- Paths other than the ones above (`~/box-build`, `~/.local/bin/claude`, `~/box-exec-proxy`). The site's own runs used other folders on the same machine.
+- Any macOS version other than 26.7.1, any Intel Mac, any Claude Code version other than 2.1.331, any Node other than 22.23.4, any Box release other than 0.3.0.
+- Paths other than the ones above (`~/box-0.3.0`, `~/box-build` for the Part 4 build, `~/.local/bin/claude`, `~/box-exec-proxy`). The workshop's own runs used other folders on the same machine.
+- Whether `gh` needs a login for the download, and whether an archive downloaded in a browser instead gets a quarantine mark that stops the binary.
 - Running the acts on an account other than the worked example's.
 - A separate check of the agent token before the request-rules act.
 
@@ -274,13 +319,15 @@ The argument-rules task also names a second, made-up account id (`fedcba98765432
 
 ## What to remember
 
-- An Apple silicon Mac, Claude Code, Node 22, a copy of the exec proxy repository, and one local box build.
-- An Anthropic API key, and two broad Cloudflare tokens that differ only in User Details Read.
-- The broad tokens make every refusal Box's, not Cloudflare's.
-- The account id and Worker name appear in four places you change for your own account.
+- **The machine:** an Apple silicon Mac, Claude Code, Node 22 and a copy of the exec proxy repository.
+- **Box:** the 0.3.0 release for Parts 2, 3 and 5, and a fork build for Part 4, which needs `gh` and Rust.
+- **The keys:** an Anthropic API key, and two broad Cloudflare tokens that differ only in User Details Read.
+- **Why broad:** the broad tokens make every refusal Box's, not Cloudflare's.
+- **Your own account:** the account id and Worker name appear in four places you change.
 
 ## Read more
 
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/install/" source="Box docs">Install the box CLI</ReadMore>
 <ReadMore href="https://strandsagents.com/docs/user-guide/box/quickstart/" source="Box docs">Get started with the box CLI and Claude Code</ReadMore>
 <ReadMore href="https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/" source="Cloudflare docs">Cloudflare's own MCP servers</ReadMore>
 <ReadMore href="/results/builds-and-gaps/" source="This workshop">Builds and gaps</ReadMore>

@@ -207,32 +207,34 @@ Every other flag is as in the free check, without the invalid key: this run uses
 
 ## What comes back
 
-<Expect title="What you should see (measured 2026-11-14, Claude Code 2.1.325, headless)">
+<Expect title="What you should see (measured 2026-11-24, Claude Code 2.1.331, headless)">
 
-- **Allowed task:** done in 2 turns with 1 `execute`. The agent lists the Workers and summarises the deployment of `box-poc-workshop`.
-- **Logs task:** 2 `search` calls, then 1 `execute`, 4 turns. The vendor's `search` found the observability query and its `execute` ran it on Cloudflare's side. The answer holds the Worker's log lines. In the last hour of that run they were two request lines, `GET /healthz` and `GET /api/workshop`. Over a 24-hour window the answer quoted a `session.step_advanced` event with an email address (`<redacted>@terraconstructs.dev`).
+- **Allowed task:** done in 2 turns with 1 `execute`. The account has one Worker, `box-poc-workshop`; its current deployment is of 2026-11-24 05:09 UTC, and it has 5 deployments in all.
+- **Logs task:** 1 `docs` call, 3 `search` calls, then 2 `execute` calls, 7 turns. The vendor's `search` found the observability query and its `execute` ran it on Cloudflare's side. The query covered 10:27 to 11:27 UTC, and that hour held 0 events, so the answer had no log lines.
 - **Box decisions:** none. There is no box.
 
 </Expect>
 
-The numbers above and below are from the earlier runs listed on [Measurements](/results/measurements/). One later paid verification run, typed as this page shows it, took 7 turns and USD 0.0415 as Claude Code reported it; only its turns and cost were recorded. What the log window holds depends on when you run it: attendee events with names and emails are there whenever attendees were active in that window.
+An earlier run, on 2026-11-14 with Claude Code 2.1.325, shows what a busier window holds. In its last hour the answer held two request lines, `GET /healthz` and `GET /api/workshop`. Over a 24-hour window the answer quoted a `session.step_advanced` event with an email address (`<redacted>`). What the log window holds depends on when you run it: attendee events with names and emails are there whenever attendees were active in that window.
 
 <Seat who="security">
 
-You see nothing, and nothing decided anything. The agent held a token that can read logs and delete Workers, and the only record of what it did is the transcript in the throwaway folder, which now holds log lines. Your constraint, "do not read the logs", existed only as a sentence. The next part puts a boundary around the agent so that there is something that can decide and record.
+You see nothing, and nothing decided anything. The agent held a token that can read logs and delete Workers, and the only record of what it did is the transcript in the throwaway folder, which holds whatever log lines came back. Your constraint, "do not read the logs", existed only as a sentence. The next part puts a boundary around the agent so that there is something that can decide and record.
 
 </Seat>
 
 <Seat who="developer">
 
-Both tasks work, quickly and cheaply: 2 turns and 0.0160 USD for the allowed task, 4 turns and 0.0318 USD for the logs. There was no friction at all, which is exactly the problem the security engineer has with it.
+Both tasks work, quickly and cheaply: 2 turns and 0.0187 USD for the allowed task, 7 turns and 0.0756 USD for the logs. There was no friction at all, which is exactly the problem the security engineer has with it.
 
 </Seat>
 
 **Takeaway:** with a broad token and no boundary, the agent can do the forbidden task as easily as the allowed one, and nobody but the agent sees it.
 
-<Measure act="token-scope" task="allowed" turns={2} tokens="3,981 in, 918 out" cost="$0.0160" wall="10 s" build="no box (Claude Code 2.1.325)" />
-<Measure act="token-scope" task="logs (last hour)" turns={4} tokens="21,563 in, 1,159 out" cost="$0.0318" wall="13 s" build="no box (Claude Code 2.1.325)" />
+<Measure act="token-scope" task="allowed" turns={2} tokens="6,421 in, 790 out" cost="$0.0187" wall="9.6 s" build="no box (Claude Code 2.1.331, 2026-11-24)" />
+<Measure act="token-scope" task="logs (last hour)" turns={7} tokens="100,744 in, 1,549 out" cost="$0.0756" wall="20.9 s" build="no box (Claude Code 2.1.331, 2026-11-24)" />
+
+One run each, headless, on 2026-11-24, with no box and Claude Code 2.1.331. Input tokens count uncached, cache-write and cache-read tokens together. The earlier runs of this act, on 2026-11-14, used fewer tokens; one run each, so the cause is not established. Details in [Measurements](/results/measurements/).
 
 ## Clean up
 
@@ -241,7 +243,7 @@ The stream files and the throwaway configuration hold the transcript, including 
 <Command what="Deletes the act's throwaway Claude Code configuration and its stream files.">
 
 ```sh
-rm -rf "$HOME/leaderboard-ops-claude-token-scope" act-a-*.jsonl
+rm -rf "$HOME/leaderboard-ops-claude-token-scope" token-scope-check.jsonl token-scope-logs.jsonl token-scope-allowed.jsonl
 ```
 
 <Flag name="-rf">Removes the folder with everything in it, without asking. Check the path before you press Enter.</Flag>
@@ -253,7 +255,7 @@ rm -rf "$HOME/leaderboard-ops-claude-token-scope" act-a-*.jsonl
 - `CLAUDE_CONFIG_DIR`, `--bare` and `--strict-mcp-config` keep your own Claude Code set-up out of every act.
 - `--tools ""` leaves the agent only the server's tools; `--allowedTools` pre-approves them for headless runs.
 - `--model`, `--max-turns` and `--max-budget-usd` make every run comparable and capped.
-- With no box, the real token goes from your shell to the vendor's server, and the logs come back.
+- With no box, the real token goes from your shell to the vendor's server, and the logs query runs.
 
 <ReadMore href="https://code.claude.com/docs/en/cli-reference" source="Claude Code docs">CLI reference: every flag used here</ReadMore>
 <ReadMore href="https://code.claude.com/docs/en/mcp" source="Claude Code docs">MCP configuration and environment variables in headers</ReadMore>

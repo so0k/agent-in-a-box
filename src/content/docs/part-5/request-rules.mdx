@@ -20,36 +20,30 @@ This is the finale. After this page you will have seen both of the developer's t
 
 The team runs the workshop progress tracker and leaderboard on Cloudflare. The developer wants the agent to help operate it. The security engineer said: the agent may read what it needs to operate the app, but not the logs or the stored attendee data, and it may not deploy or delete.
 
-In the opaque-execute act the logs came back, because the vendor's `execute` ran the script where Box could not see it. In the deny-execute act refusing `execute` stopped both tasks. In the tool-allowlist and argument-rules acts one tool per operation gave the security engineer a decision per operation, at about 240,000 input tokens a run. Now the agent has code mode's two tools again, but the script runs in the box, and the rules of the last page decide each request it sends.
+In the opaque-execute act the logs came back, because the vendor's `execute` ran the script where Box could not see it. In the deny-execute act refusing `execute` stopped both tasks. In the tool-allowlist and argument-rules acts one tool per operation gave the security engineer a decision per operation, at 246,000 to 329,000 input tokens a run. Now the agent has code mode's two tools again, but the script runs in the box, and the rules of the last page decide each request it sends.
 
 <CatchUp>
 
-Every file the request-rules act uses. The profile and the policy file live in `$HOME/box-ws/profiles/ws/`, the MCP file in `$HOME/leaderboard-ops/`. The `.dw` files of Parts 3 and 4 may still be on disk; the profile does not list them.
+Every file the request-rules act uses. The profile and the two policy files live in `$HOME/box-ws/profiles/ws/`, the MCP file in `$HOME/leaderboard-ops/`. The `.dw` files of Parts 3 and 4 may still be on disk; the profile does not list them.
 
 ```toml title="$HOME/box-ws/profiles/ws/profile.toml"
-packs = ["@box/base"]
-policies = ["api-read-only.dw"]
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw", "api-read-only.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.exec-proxy]
 type = "stdio"
@@ -64,6 +58,30 @@ env = { CLOUDFLARE_ACCOUNT_ID = "0123456789abcdef0123456789abcdef" }
 [egress.cloudflare-api]
 destinations = ["api.cloudflare.com"]
 secret.ref = "env://CLOUDFLARE_API_TOKEN"
+```
+
+```text title="$HOME/box-ws/profiles/ws/policy.dw"
+// Copied from @box/locked (Locked) by `box profile create`. This file is yours: only
+// `box profile create --force` replaces it. Edit the rules here, and the next run
+// uses them.
+
+// The box's shell runs none of its own commands, such as cd, cat, or echo, and the agent reaches
+// its project and what your packs and profile allow, such as the model and package registries. A
+// tool that a pack declares, such as git, still starts, because box writes its permit. The agent's
+// own file tools still work: your profile's filesystem lists decide what they reach.
+
+// Let programs read and write /dev/null, which they redirect output to all the time.
+@id("dev_null")
+permit (principal, action in [Box::Action::"fs:read", Box::Action::"fs:write"], resource)
+when { context.input.path == "/dev/null" };
+
+//
+// To let the shell run some commands, add a rule that names them. Agents run uname at startup to
+// identify the system, such as:
+//
+// @id("shell_commands")
+// permit (principal, action == Box::Action::"shell:exec", resource)
+// when { ["uname", "cd", "pwd", "ls", "cat", "grep", "head", "tail", "wc"].contains(context.input.program) };
 ```
 
 ```text title="$HOME/box-ws/profiles/ws/api-read-only.dw"
@@ -134,6 +152,8 @@ box run ws -- --bare --strict-mcp-config --mcp-config exec-proxy.json --tools ""
 
 Claude Code first asks whether to use the API key it found: that is Box's stand-in, so press Up, then Enter. It asks on every box run, because the stand-in is new each time. Then type the task. Do not press Ctrl+\ in the banner: it turns policy off. Interactive runs have no money cap; `--max-budget-usd` works only headless.
 
+Interactive mode was not run for this workshop.
+
 </TabItem>
 <TabItem label="Headless">
 
@@ -179,46 +199,50 @@ The answer is the last event in each file; open it with `less`. Read Box's decis
 <Expect variant="permit" title="Box's decisions, allowed task">
 
 ```text
-permit  shell:spawn   ~/.local/share/mise/installs/node/22.23.4/bin/node  mcp_exec-proxy_spawn
-permit  mcp:call      exec-proxy/tools/list                               mcp_exec-proxy_call
-permit  mcp:call      exec-proxy/execute                                  mcp_exec-proxy_call
-permit  http:request  api.cloudflare.com:443/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts  route_cloudflare-api_request
-permit  http:request  api.cloudflare.com:443/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts/box-poc-workshop/deployments  route_cloudflare-api_request
+installed  policy        policy.dw                                           -
+permit     shell:spawn   ~/.local/share/mise/installs/node/22.23.4/bin/node  mcp_exec-proxy_spawn
+permit     mcp:call      exec-proxy/tools/list                               mcp_exec-proxy_call
+permit     mcp:call      exec-proxy/execute                                  mcp_exec-proxy_call
+permit     http:request  api.cloudflare.com:443/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts  route_cloudflare-api_request
+permit     http:request  api.cloudflare.com:443/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/scripts/box-poc-workshop/deployments  route_cloudflare-api_request
 ```
 
-The rows are shown without the time column and without the `net:connect` rows.
+The rows are shown without the time column, without the `net:connect` rows and without the model's own traffic to `api.anthropic.com`.
 
 </Expect>
 
 - The agent called `execute` once, with no `search` first. Its one script sent two `GET`s.
 - Both requests were permitted by the route's generated rule, `route_cloudflare-api_request`. Neither `forbid` matched, so the route's permit stood.
-- The answer, in outline: one Worker on the account, `box-poc-workshop`. Its current deployment was created on 2026-11-14 at 14:17 UTC, with one version at 100 percent, deployed with wrangler by `<redacted>`. Four deployments were listed.
+- The answer, in outline: one Worker on the account, `box-poc-workshop`. Its current deployment was created on 2026-11-24 at 05:09:57 UTC, with one version at 100 percent, deployed with wrangler by `<redacted>`. 5 deployments were listed.
 
 ### The logs task: refused at the gateway
 
 <Expect variant="refuse" title="Box's decisions, logs task">
 
 ```text
-permit  mcp:call      exec-proxy/search    mcp_exec-proxy_call
-permit  mcp:call      exec-proxy/search    mcp_exec-proxy_call
-permit  mcp:call      exec-proxy/execute   mcp_exec-proxy_call
-deny    http:request  api.cloudflare.com:443/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/observability/telemetry/query  no_worker_logs  a forbid rule matched
+installed  policy        policy.dw                                           -
+permit     shell:spawn   ~/.local/share/mise/installs/node/22.23.4/bin/node  mcp_exec-proxy_spawn
+permit     mcp:call      exec-proxy/tools/list                               mcp_exec-proxy_call
+permit     mcp:call      exec-proxy/search                                   mcp_exec-proxy_call
+permit     mcp:call      exec-proxy/search                                   mcp_exec-proxy_call
+permit     mcp:call      exec-proxy/execute                                  mcp_exec-proxy_call
+deny       http:request  api.cloudflare.com:443/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/observability/telemetry/query  no_worker_logs  a forbid rule matched
 ```
 
-The rule name in the last line can be either `no_worker_logs` or `operate_requests_only`: both rules matched, and which one is listed differs between runs. This line is from a later paid run; an earlier run named `operate_requests_only`.
+The rule name in the last line can be either `no_worker_logs` or `operate_requests_only`: both rules matched, and which one is listed differs between runs. In the run measured on 2026-11-24 the history named `no_worker_logs`, while the error text below names `operate_requests_only` first.
 
-The error the script threw, as the model received it, starts like this:
+The error the script threw, as the model received it:
 
 ```text
-Error: Refused by Box egress policy (rule: no_worker_logs): POST /accounts/0123456789abcdef0123456789abcdef/workers/observability/telemetry/query was not sent. The Worker's logs hold attendee names and email addresses. The agent may not read them.; [policy: operate_requests_only]: Only two reads are allowed: ...
+Error: Refused by Box egress policy (rule: operate_requests_only): POST /accounts/0123456789abcdef0123456789abcdef/workers/observability/telemetry/query was not sent. Only two reads are allowed: the Worker list of the workshop account, and the deployments of box-poc-workshop. Every other Cloudflare API request is refused.; [policy: no_worker_logs]: The Worker's logs hold attendee names and email addresses. The agent may not read them.
 ```
 
 </Expect>
 
 - The agent used `search` twice to find the log query in Cloudflare's API description, then one `execute` whose script sent `POST .../workers/observability/telemetry/query`.
 - The gateway refused it. The request never reached Cloudflare, so no log line, and no attendee name or address, came back.
-- Both rules matched. `box runs history` names only one of them, and which one is not fixed: in two paid runs it named `operate_requests_only` once and `no_worker_logs` once. The record in `records.jsonl` names both in `strands.box.policy.determining.ids`, in an order that also differs between runs. The agent's error carries both reasons. If you look for a refusal by rule name, search for both names.
-- The answer: the agent said the request was refused by policy, did not look for another endpoint, and offered the deployment history instead.
+- Both rules matched. `box runs history` names only one of them, and which one is not fixed: in two paid runs it named `operate_requests_only` once and `no_worker_logs` once, and `no_worker_logs` on 2026-11-24. The record in `records.jsonl` names both in `strands.box.policy.determining.ids`, in an order that also differs between runs. The agent's error carries both reasons. If you look for a refusal by rule name, search for both names.
+- The answer: the agent said the request was refused, and named both rules with their reasons. It did not try another route, such as the tails endpoint, "because that would get around the same policy". It offered the Cloudflare dashboard, `wrangler tail box-poc-workshop` in your own shell, and the deployments, which the policy allows. It said it cannot change the policy itself.
 
 To print only the refusal:
 
@@ -242,7 +266,7 @@ For the first time the policy decided the request that reaches Cloudflare: metho
 </Seat>
 <Seat who="developer">
 
-The allowed task was done in one `execute`, in 2 turns, for 4,089 input tokens and USD 0.0140. The logs task was refused cleanly in 4 turns, and the agent said why, in the security engineer's words, and tried nothing else. The agent works the way code mode works, with two tools, and nothing waits a minute for a tool catalog.
+The allowed task was done in one `execute`, in 2 turns, for 8,300 input tokens and USD 0.0215. The logs task was refused cleanly in 4 turns, and the agent said why, in the security engineer's words, and tried nothing else. The agent works the way code mode works, with two tools, and nothing waits a minute for a tool catalog.
 
 </Seat>
 
@@ -252,10 +276,10 @@ With `execute` inside the box, the developer keeps code mode's small tool list a
 
 ## Measured
 
-Both runs on the workshop's build, pkg-fix (`box 0.1.0`, a local build), with Claude Code 2.1.330, on 2026-11-22. Tool loading: the exec proxy's two tools, Claude Code's tool search off (`--tools ""`). Tokens are input tokens of all kinds (uncached, cache write, cache read) and output tokens; wall is the time `box run` took.
+One run each, headless, on 2026-11-24, with Box 0.3.0 and Claude Code 2.1.331. Tool loading: the exec proxy's two tools, Claude Code's tool search off (`--tools ""`). Input tokens count uncached, cache-write and cache-read tokens together. About 3,500 of them are the pack's system prompt ([Inside the pack](/part-2/inside-the-pack/)). Wall is the time `box run` took.
 
-<Measure act="request-rules" task="allowed" turns={2} tokens="4,089 in, 862 out" cost="$0.0140" wall="9 s" build="pkg-fix (box 0.1.0)" />
-<Measure act="request-rules" task="logs (last hour)" turns={4} tokens="17,302 in, 997 out" cost="$0.0275" wall="14 s" build="pkg-fix (box 0.1.0)" />
+<Measure act="request-rules" task="allowed" turns={2} tokens="8,300 in, 799 out" cost="$0.0215" wall="8.3 s" build="Box 0.3.0 (Claude Code 2.1.331, 2026-11-24)" />
+<Measure act="request-rules" task="logs (last hour)" turns={4} tokens="20,561 in, 953 out" cost="$0.0213" wall="10.4 s" build="Box 0.3.0 (Claude Code 2.1.331, 2026-11-24)" />
 
 ## Clean up
 

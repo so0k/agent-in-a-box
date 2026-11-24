@@ -23,33 +23,52 @@ In the opaque-execute act the agent ran in a box, and the logs of the workshop p
 <CatchUp>
 
 ```toml title="$HOME/box-ws/profiles/ws/profile.toml"
-packs = ["@box/base"]
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.cloudflare]
 type = "http"
 destinations = ["mcp.cloudflare.com"]
 secret.ref = "env://CLOUDFLARE_MCP_TOKEN"
+```
+
+```text title="$HOME/box-ws/profiles/ws/policy.dw"
+// Copied from @box/locked (Locked) by `box profile create`. This file is yours: only
+// `box profile create --force` replaces it. Edit the rules here, and the next run
+// uses them.
+
+// The box's shell runs none of its own commands, such as cd, cat, or echo, and the agent reaches
+// its project and what your packs and profile allow, such as the model and package registries. A
+// tool that a pack declares, such as git, still starts, because box writes its permit. The agent's
+// own file tools still work: your profile's filesystem lists decide what they reach.
+
+// Let programs read and write /dev/null, which they redirect output to all the time.
+@id("dev_null")
+permit (principal, action in [Box::Action::"fs:read", Box::Action::"fs:write"], resource)
+when { context.input.path == "/dev/null" };
+
+//
+// To let the shell run some commands, add a rule that names them. Agents run uname at startup to
+// identify the system, such as:
+//
+// @id("shell_commands")
+// permit (principal, action == Box::Action::"shell:exec", resource)
+// when { ["uname", "cd", "pwd", "ls", "cat", "grep", "head", "tail", "wc"].contains(context.input.program) };
 ```
 
 ```json title="$HOME/leaderboard-ops/cloudflare-code-mode.json"
@@ -76,32 +95,26 @@ The pieces are the same as in the opaque-execute act. What changes is the path: 
 
 <Iteration n={1} title="Name a policy file">
 
-**What we add.** One line under `packs`: the profile now names a policy file.
+**What we add.** A second name on line 5, the `policies` line: the profile now names a policy file of yours after the starter.
 
-```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={2}
-packs = ["@box/base"]
-policies = ["no-remote-execute.dw"]
+```toml title="$HOME/box-ws/profiles/ws/profile.toml" ins={5}
+# Written by `box profile create`. Your values go here, and the packs hold the rest.
+# `box profile show ws` prints what a run gets.
+# For help from a coding agent, tell it: Run box help agent and follow it.
+packs = ["@box/claude", "@box/anthropic"]
+policies = ["policy.dw", "no-remote-execute.dw"]
 
+# How much of your project the agent reaches: "none", "read", "write".
 [project]
 access = "read"
 
-[storage]
-directories = ["config", "tmp"]
-
-[agent]
-command = ["${{ home }}/.local/bin/claude", { slot = "agent-args" }]
+[options]
+claude.host = "anthropic"
+claude.import-mcp = "false"
+claude.import-hooks = "false"
 
 [agent.env]
-CLAUDE_CONFIG_DIR = "${{ storage.config }}"
-CLAUDE_CODE_TMPDIR = "${{ storage.tmp }}"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-DISABLE_AUTOUPDATER = "1"
-
-[egress.anthropic]
-destinations = ["api.anthropic.com"]
-secret.ref = "env://ANTHROPIC_API_KEY"
-secret.header = "x-api-key"
-secret.phantom_prefix = "sk-ant-"
 
 [mcp.cloudflare]
 type = "http"
@@ -121,12 +134,15 @@ box profile show ws
 
 </Command>
 
-**What we see.** Box refuses: the file does not exist yet. The `:2` is the line of `profile.toml` that names it. (Your terminal may wrap the line.)
+**What we see.** Box refuses: the file does not exist yet. The `:5` is the line of `profile.toml` that names it, and `policies[1]` is the second name in the list (Box counts from 0). Box prints the full path to your home folder, here written `~`, and wraps the message over several lines. Where the lines break depends on the length of the path, and perhaps on your terminal (inferred). Measured on Box 0.3.0, 2026-11-24, with a Box home of another length:
 
 <Expect variant="refuse">
 
 ```text
-box: error: ~/box-ws/profiles/ws/profile.toml:2: `policies[0]` = "no-remote-execute.dw": cannot read ~/box-ws/profiles/ws/no-remote-execute.dw: No such file or directory (os error 2)
+box: error: ~/box-ws/profiles/ws/profile.toml:5: `policies[1]`
+            = "no-remote-execute.dw": cannot read
+            ~/box-ws/profiles/ws/no-remote-execute.dw: No such
+            file or directory (os error 2)
 ```
 
 </Expect>
@@ -135,7 +151,7 @@ box: error: ~/box-ws/profiles/ws/profile.toml:2: `policies[0]` = "no-remote-exec
 `policies` is the profile's list of rule files. A name without a folder is read from the profile's own folder, so the file belongs next to `profile.toml`. The name says what the file is for: no script runs remotely, out of Box's sight.
 
 <Fragment slot="alternative">
-Several files are allowed (`policies = ["a.dw", "b.dw"]`); Box joins them in list order. One file per constraint keeps each one easy to remove, which you will do in the tool-allowlist act.
+Add the rule to the starter's `policy.dw` instead. It would work the same, because Box joins the files in `policies` in list order (inferred; not run for this workshop). One file per constraint keeps each one easy to remove, which you will do in the tool-allowlist act.
 </Fragment>
 </Why>
 
@@ -151,6 +167,7 @@ Several files are allowed (`policies = ["a.dw", "b.dw"]`); Box joins them in lis
   - profiles/
     - ws/
       - profile.toml you edit this
+      - policy.dw the starter policy
       - **no-remote-execute.dw** your first policy file
   - storage/ kept between runs
   - r/ one folder per run
@@ -177,7 +194,7 @@ Build the file in this order, reading each line as you type it.
 forbid (principal, action == cloudflare::Action::"execute", resource);
 ```
 
-**The run.** First `box profile show ws` again: it passes now and lists `policies  no-remote-execute.dw`. Then the free check from [MCP through the broker](/part-2/mcp-through-the-broker/). The `ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key` in front replaces the key for this one command, so Claude Code connects its MCP server and stops at its first model call; nothing is billed.
+**The run.** First `box profile show ws` again: it passes now and lists `policies  policy.dw, no-remote-execute.dw`. Then the free check from [MCP through the broker](/part-2/mcp-through-the-broker/). The `ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key` in front replaces the key for this one command, so Claude Code connects its MCP server and stops at its first model call; nothing is billed.
 
 <Command what="Starts the box, lets Claude Code connect the Cloudflare server, and stops at the first model call.">
 
@@ -188,7 +205,7 @@ ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key box run ws --no-banner -- --bare 
 <Flag name="ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key">For this command only, the variable holds a key that Anthropic refuses. Box reads it as the real key and the gateway sends it; the model API answers 401, and the run ends before any tokens are billed.</Flag>
 <Flag name="run ws">Start profile `ws` in the current folder (the project, `$HOME/leaderboard-ops`).</Flag>
 <Flag name="--no-banner">No activity line under the agent. Headless runs do not need it.</Flag>
-<Flag name="--">Ends Box's options. Everything after it goes to Claude Code, at the `agent-args` slot of the profile's command.</Flag>
+<Flag name="--">Ends Box's options. Everything after it goes to Claude Code, after the arguments the Claude Code pack adds.</Flag>
 <Flag name="--bare">Claude Code's minimal mode: no hooks, plugins, memory or CLAUDE.md, and the key only from `ANTHROPIC_API_KEY`.</Flag>
 <Flag name="--strict-mcp-config">Use only the servers in `--mcp-config`.</Flag>
 <Flag name="--mcp-config cloudflare-code-mode.json">The act's one MCP server, from the workspace file.</Flag>
@@ -203,7 +220,7 @@ ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key box run ws --no-banner -- --bare 
 
 </Command>
 
-**What we see.** The terminal shows Box's start-up lines and no warning. The first line of `check.jsonl` (open it with `head -1 check.jsonl`) still lists `mcp__cloudflare__execute` among the five tools: Box does not hide a tool, it refuses the call. The run's own policy file, `$HOME/box-ws/r/<box ID>/policy.dw` (the box ID is in the `box: running profile ws with box ID ...` line), holds your rule at line 4, before the generated rules.
+**What we see.** The terminal shows Box's start-up lines and no warning. The first line of `check.jsonl` (open it with `head -1 check.jsonl`) still lists `mcp__cloudflare__execute` among the five tools: Box does not hide a tool, it refuses the call. The run's own policy file, `$HOME/box-ws/r/<box ID>/policy.dw` (the box ID is in the `box: running profile ws with box ID ...` line), holds your rule at line 26, after the starter's text and before the generated rules (measured on Box 0.3.0, 2026-11-24).
 
 <Expect>
 
@@ -253,6 +270,10 @@ box run ws -- --bare --strict-mcp-config --mcp-config cloudflare-code-mode.json 
 
 </Command>
 
+<Aside type="note" title="Not run for this workshop">
+Interactive mode was not run for this workshop.
+</Aside>
+
 Claude Code asks whether to use the API key it found (press Up, then Enter for Yes; the key shown is Box's stand-in, new every run). Then type the two tasks below, one after the other. There is no money cap in interactive mode.
 
 </TabItem>
@@ -296,18 +317,17 @@ box runs history <box ID>
 
 </Command>
 
-For the logs task (measured on the workshop's build; time column and `net:connect` rows left out):
+For the logs task (measured on Box 0.3.0, 2026-11-24; time column, `net:connect` and `http:request` rows left out):
 
 <Expect variant="refuse">
 
 ```text
-permit  mcp:call  cloudflare/resources/list  mcp_cloudflare_call
-permit  mcp:call  cloudflare/tools/list      mcp_cloudflare_call
-permit  mcp:call  cloudflare/search          mcp_cloudflare_call
-permit  mcp:call  cloudflare/docs            mcp_cloudflare_call
-permit  mcp:call  cloudflare/search          mcp_cloudflare_call
-permit  mcp:call  cloudflare/search          mcp_cloudflare_call
-deny    execute   cloudflare/execute         no_hidden_api_calls  a forbid rule matched
+installed  policy    policy.dw                  -
+permit     mcp:call  cloudflare/tools/list      mcp_cloudflare_call
+permit     mcp:call  cloudflare/resources/list  mcp_cloudflare_call
+permit     mcp:call  cloudflare/search          mcp_cloudflare_call
+permit     mcp:call  cloudflare/search          mcp_cloudflare_call
+deny       execute   cloudflare/execute         no_hidden_api_calls  a forbid rule matched
 ```
 
 </Expect>
@@ -324,27 +344,32 @@ per-tool gate (cloudflare::Action::"execute"): policy denied this operation on '
 
 ### The answers, in outline
 
-In both measured runs the agent said it could not do the task, named the rule, and said it did not try to get around it. For the logs task it then wrote out a `curl` command for the developer to run outside the box. For the allowed task it suggested `npx wrangler deployments list`.
+In both measured runs the agent said it could not do the task, named the rule, and said it did not try another route. Neither answer gave a `curl` command.
+
+- **Logs task:** it said which request it had meant to send (`POST .../workers/observability/telemetry/query`, for the last hour). Then it offered two ways on: change the policy and press Ctrl+Alt+R, or run `npx wrangler tail box-poc-workshop` or open the dashboard.
+- **Allowed task:** it said "Calling the API through the shell would get around the policy, so I didn't do that either", and offered `npx wrangler deployments list`, with a note that `npx` and the Cloudflare hosts would have to be allowed in the profile.
+
+Both answers speak of Ctrl+Alt+R, and the allowed answer also of the banner, although these headless runs had no banner. That comes from the pack's system prompt ([Inside the pack](/part-2/inside-the-pack/)).
 
 ## Why search and docs cannot do the allowed task
 
-The code-mode server offers five tools: `docs`, `execute`, `search`, `submit_feedback` and `whoami`. In Cloudflare's code-mode design, `search` finds operations in the description of Cloudflare's API and `docs` searches Cloudflare's documentation. They tell the agent which request would list the Workers. Only `execute` runs code that sends that request ([MCP servers and code mode](/part-1/mcp-and-code-mode/)). So the logs task searched three times, read the docs once, wrote its script, and was refused at the last step; the allowed task went straight to `execute` and was refused at once. With `execute` gone, the server can describe the API but cannot use it.
+The code-mode server offers five tools: `docs`, `execute`, `search`, `submit_feedback` and `whoami`. In Cloudflare's code-mode design, `search` finds operations in the description of Cloudflare's API and `docs` searches Cloudflare's documentation. They tell the agent which request would list the Workers. Only `execute` runs code that sends that request ([MCP servers and code mode](/part-1/mcp-and-code-mode/)). So the logs task searched twice, wrote its script, and was refused at the last step; the allowed task went straight to `execute` and was refused at once. With `execute` gone, the server can describe the API but cannot use it.
 
 ## The two seats
 
 <Seat who="security">
-The constraint holds: no script runs on Cloudflare's side, so neither the logs nor the attendee data can come back through this server. The records name the rule for each refusal. But the rule is all or nothing. The policy still cannot tell a request for the Worker list from a request for the logs, because both would arrive as `execute`. And the agent handed the developer a `curl` command that does outside the box what the box refused.
+The constraint holds: no script runs on Cloudflare's side, so neither the logs nor the attendee data can come back through this server. The records name the rule for each refusal. But the rule is all or nothing. The policy still cannot tell a request for the Worker list from a request for the logs, because both would arrive as `execute`. And the agent pointed the developer to `npx wrangler tail` and to a policy change, both ways around the box.
 </Seat>
 <Seat who="developer">
-Both tasks fail, including the one the team agreed is fine. The logs task cost more than the allowed one because the agent searched and read the docs before it tried `execute`. The agent was honest about the refusal, and its suggestions move the work out of the box, where nothing is recorded.
+Both tasks fail, including the one the team agreed is fine. The logs task cost more than the allowed one because the agent searched before it tried `execute`. The agent was honest about the refusal, and its suggestions move the work out of the box, where nothing is recorded.
 </Seat>
 
 **The takeaway:** refusing a tool by name is easy to write and hard to get around, but in code mode it refuses everything, so control costs usefulness.
 
-<Measure act="deny-execute" task="logs (last hour)" turns={6} tokens="75,732 in, 1,715 out" cost="$0.0729" wall="22 s" build="pkg-fix" />
-<Measure act="deny-execute" task="allowed" turns={2} tokens="4,826 in, 708 out" cost="$0.0090" wall="8 s" build="pkg-fix" />
+<Measure act="deny-execute" task="logs (last hour)" turns={4} tokens="22,816 in, 906 out" cost="$0.0185" wall="12.5 s" build="Box 0.3.0 (Claude Code 2.1.331, 2026-11-24)" />
+<Measure act="deny-execute" task="allowed" turns={2} tokens="8,861 in, 773 out" cost="$0.0098" wall="9.9 s" build="Box 0.3.0 (Claude Code 2.1.331, 2026-11-24)" />
 
-One run each, headless, on the workshop's build (`pkg-fix`, see [Builds and gaps](/results/builds-and-gaps/)). Input tokens count uncached, cache-write and cache-read tokens together.
+One run each, headless, on 2026-11-24, with Box 0.3.0 and Claude Code 2.1.331. Input tokens count uncached, cache-write and cache-read tokens together. About 3,500 of them are the pack's system prompt ([Inside the pack](/part-2/inside-the-pack/)).
 
 ## Clean up
 
