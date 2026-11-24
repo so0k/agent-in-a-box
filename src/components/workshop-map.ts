@@ -1,6 +1,6 @@
 // The five parts and six acts, in reading order. Keep in step with the sidebar
 // in astro.config.mjs (used by <PartProgress> and <Pieces>).
-export type ActId = 'a' | 'b1' | 'b2' | 'b3' | 'b3-args' | 'c';
+export type ActId = 'token-scope' | 'opaque-execute' | 'deny-execute' | 'tool-allowlist' | 'argument-rules' | 'request-rules';
 
 export interface Part {
 	n: number;
@@ -16,8 +16,8 @@ export const PARTS: Part[] = [
 		n: 1,
 		short: 'A broad token',
 		title: 'An agent with a broad token',
-		pages: ['part-1/mcp-and-code-mode', 'part-1/act-a'],
-		acts: [{ id: 'a', slug: 'part-1/act-a' }],
+		pages: ['part-1/mcp-and-code-mode', 'part-1/token-scope'],
+		acts: [{ id: 'token-scope', slug: 'part-1/token-scope' }],
 	},
 	{
 		n: 2,
@@ -28,32 +28,32 @@ export const PARTS: Part[] = [
 			'part-2/first-profile',
 			'part-2/secrets-and-egress',
 			'part-2/mcp-through-the-broker',
-			'part-2/act-b1',
+			'part-2/opaque-execute',
 		],
-		acts: [{ id: 'b1', slug: 'part-2/act-b1' }],
+		acts: [{ id: 'opaque-execute', slug: 'part-2/opaque-execute' }],
 	},
 	{
 		n: 3,
 		short: 'The policy',
 		title: 'Write the policy',
-		pages: ['part-3/policy-basics', 'part-3/act-b2'],
-		acts: [{ id: 'b2', slug: 'part-3/act-b2' }],
+		pages: ['part-3/policy-basics', 'part-3/deny-execute'],
+		acts: [{ id: 'deny-execute', slug: 'part-3/deny-execute' }],
 	},
 	{
 		n: 4,
 		short: 'One tool per operation',
 		title: 'One tool per operation',
-		pages: ['part-4/per-endpoint-catalog', 'part-4/act-b3', 'part-4/policy-on-arguments', 'part-4/act-b3-args'],
+		pages: ['part-4/per-endpoint-catalog', 'part-4/tool-allowlist', 'part-4/policy-on-arguments', 'part-4/argument-rules'],
 		acts: [
-			{ id: 'b3', slug: 'part-4/act-b3' },
-			{ id: 'b3-args', slug: 'part-4/act-b3-args' },
+			{ id: 'tool-allowlist', slug: 'part-4/tool-allowlist' },
+			{ id: 'argument-rules', slug: 'part-4/argument-rules' },
 		],
 	},
 	{
 		n: 5,
 		short: 'Code mode in the box',
 		title: 'Bring code mode into the box',
-		pages: ['part-5/local-execute', 'part-5/egress-policy', 'part-5/act-c'],
-		acts: [{ id: 'c', slug: 'part-5/act-c' }],
+		pages: ['part-5/local-execute', 'part-5/egress-policy', 'part-5/request-rules'],
+		acts: [{ id: 'request-rules', slug: 'part-5/request-rules' }],
 	},
 ];

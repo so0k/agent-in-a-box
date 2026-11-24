@@ -5,7 +5,7 @@
  * act; any other page in a part marks its part. Every step is a link.
  *
  * Usage (MDX):
- *   <PartProgress current="part-2/act-b1" />
+ *   <PartProgress current="part-2/opaque-execute" />
  */
 import { PARTS } from './workshop-map';
 interface Props {
@@ -42,7 +42,7 @@ const partIndex = currentPart ? PARTS.indexOf(currentPart) : -1;
 										href={href(act.slug)}
 										class:list={['aib-progress-act', { 'is-current': act === currentAct }]}
 										aria-current={act === currentAct ? 'page' : undefined}
-										title={`Act ${act.id}`}
+										title={`The ${act.id} act`}
 									>
 										{act.id}
 									</a>

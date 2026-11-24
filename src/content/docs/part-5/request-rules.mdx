@@ -1,18 +1,18 @@
 ---
-title: "Act c: code mode inside the box"
+title: "request-rules: code mode inside the box"
 description: "The allowed task done in one execute; the logs request refused at the gateway."
 sidebar:
-  label: "Act c: the finale"
+  label: "request-rules"
   order: 3
   badge:
-    text: "Act c"
+    text: "Act"
     class: "aib-badge aib-badge-act"
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { PartProgress, Pieces, CatchUp, Command, Flag, ReadMore, Prompt, Expect, Seat, Measure } from '~/components';
 
-<PartProgress current="part-5/act-c" />
+<PartProgress current="part-5/request-rules" />
 
 This is the finale. After this page you will have seen both of the developer's tasks run through the local exec proxy: the allowed task done in one `execute` with two permitted requests, and the logs query refused at the gateway with the security engineer's rule named. It is the first act in which both seats get what they asked for.
 
@@ -20,11 +20,11 @@ This is the finale. After this page you will have seen both of the developer's t
 
 The team runs the workshop progress tracker and leaderboard on Cloudflare. The developer wants the agent to help operate it. The security engineer said: the agent may read what it needs to operate the app, but not the logs or the stored attendee data, and it may not deploy or delete.
 
-In act b1 the logs came back, because the vendor's `execute` ran the script where Box could not see it. In act b2 refusing `execute` stopped both tasks. In acts b3 and b3-args one tool per operation gave the security engineer a decision per operation, at about 240,000 input tokens a run. Now the agent has code mode's two tools again, but the script runs in the box, and the rules of the last page decide each request it sends.
+In the opaque-execute act the logs came back, because the vendor's `execute` ran the script where Box could not see it. In the deny-execute act refusing `execute` stopped both tasks. In the tool-allowlist and argument-rules acts one tool per operation gave the security engineer a decision per operation, at about 240,000 input tokens a run. Now the agent has code mode's two tools again, but the script runs in the box, and the rules of the last page decide each request it sends.
 
 <CatchUp>
 
-Every file act c uses. The profile and the policy file live in `$HOME/box-ws/profiles/ws/`, the MCP file in `$HOME/leaderboard-ops/`. The `.dw` files of Parts 3 and 4 may still be on disk; the profile does not list them.
+Every file the request-rules act uses. The profile and the policy file live in `$HOME/box-ws/profiles/ws/`, the MCP file in `$HOME/leaderboard-ops/`. The `.dw` files of Parts 3 and 4 may still be on disk; the profile does not list them.
 
 ```toml title="$HOME/box-ws/profiles/ws/profile.toml"
 packs = ["@box/base"]
@@ -102,7 +102,7 @@ when { context.input.host == "api.cloudflare.com" && context.input.path like "*/
 
 </CatchUp>
 
-<Pieces stage={5} highlight="c" />
+<Pieces stage={5} highlight="request-rules" />
 
 The highlighted path: Claude Code calls the exec proxy through the MCP broker; the proxy's requests go to the egress gateway, which sends the two permitted reads to the Cloudflare API and refuses the logs query. The vendor's MCP server is not on the path at all.
 
@@ -140,24 +140,24 @@ Claude Code first asks whether to use the API key it found: that is Box's stand-
 <Command what="Runs the allowed task headless and writes the stream to a file.">
 
 ```sh
-box run ws --no-banner -- --bare --strict-mcp-config --mcp-config exec-proxy.json --tools "" --allowedTools mcp__exec-proxy --model claude-sonnet-5-5 --max-turns 10 --max-budget-usd 0.25 -p "List the Workers on Cloudflare account 0123456789abcdef0123456789abcdef and summarise the current deployment of the Worker box-poc-workshop." --output-format stream-json --verbose < /dev/null > act-c-allowed.jsonl
+box run ws --no-banner -- --bare --strict-mcp-config --mcp-config exec-proxy.json --tools "" --allowedTools mcp__exec-proxy --model claude-sonnet-5-5 --max-turns 10 --max-budget-usd 0.25 -p "List the Workers on Cloudflare account 0123456789abcdef0123456789abcdef and summarise the current deployment of the Worker box-poc-workshop." --output-format stream-json --verbose < /dev/null > request-rules-allowed.jsonl
 ```
 
 <Flag name="--no-banner">No activity line; headless output goes to a file anyway.</Flag>
 <Flag name="--max-turns 10 --max-budget-usd 0.25">Two hard stops: 10 model turns, and USD 0.25 of cost.</Flag>
 <Flag name='-p "List the Workers ..."'>The allowed task, word for word.</Flag>
-<Flag name="--output-format stream-json --verbose < /dev/null > act-c-allowed.jsonl">One JSON event per line into a file, with an empty input. The other flags are as in the interactive form.</Flag>
+<Flag name="--output-format stream-json --verbose < /dev/null > request-rules-allowed.jsonl">One JSON event per line into a file, with an empty input. The other flags are as in the interactive form.</Flag>
 
 </Command>
 
 <Command what="Runs the logs task headless and writes the stream to a file.">
 
 ```sh
-box run ws --no-banner -- --bare --strict-mcp-config --mcp-config exec-proxy.json --tools "" --allowedTools mcp__exec-proxy --model claude-sonnet-5-5 --max-turns 10 --max-budget-usd 0.25 -p "Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > act-c-logs.jsonl
+box run ws --no-banner -- --bare --strict-mcp-config --mcp-config exec-proxy.json --tools "" --allowedTools mcp__exec-proxy --model claude-sonnet-5-5 --max-turns 10 --max-budget-usd 0.25 -p "Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > request-rules-logs.jsonl
 ```
 
 <Flag name='-p "Show me the last hour of logs ..."'>The logs task, word for word. Everything else is as for the allowed task.</Flag>
-<Flag name="> act-c-logs.jsonl">A second file, so the two runs stay apart.</Flag>
+<Flag name="> request-rules-logs.jsonl">A second file, so the two runs stay apart.</Flag>
 
 </Command>
 
@@ -254,15 +254,15 @@ With `execute` inside the box, the developer keeps code mode's small tool list a
 
 Both runs on the workshop's build, pkg-fix (`box 0.1.0`, a local build), with Claude Code 2.1.330, on 2026-11-22. Tool loading: the exec proxy's two tools, Claude Code's tool search off (`--tools ""`). Tokens are input tokens of all kinds (uncached, cache write, cache read) and output tokens; wall is the time `box run` took.
 
-<Measure act="c" task="allowed" turns={2} tokens="4,089 in, 862 out" cost="$0.0140" wall="9 s" build="pkg-fix (box 0.1.0)" />
-<Measure act="c" task="logs (last hour)" turns={4} tokens="17,302 in, 997 out" cost="$0.0275" wall="14 s" build="pkg-fix (box 0.1.0)" />
+<Measure act="request-rules" task="allowed" turns={2} tokens="4,089 in, 862 out" cost="$0.0140" wall="9 s" build="pkg-fix (box 0.1.0)" />
+<Measure act="request-rules" task="logs (last hour)" turns={4} tokens="17,302 in, 997 out" cost="$0.0275" wall="14 s" build="pkg-fix (box 0.1.0)" />
 
 ## Clean up
 
-<Command what="Deletes this act's stream files and the free check's stream. A stream holds whatever the agent read; the allowed task's answer can include the deployer's email address. `act-c-noroute.jsonl` is the stream from the network rules page.">
+<Command what="Deletes this act's stream files and the free check's stream. A stream holds whatever the agent read; the allowed task's answer can include the deployer's email address. `request-rules-noroute.jsonl` is the stream from the network rules page.">
 
 ```sh
-rm -f act-c-allowed.jsonl act-c-logs.jsonl act-c-noroute.jsonl check.jsonl
+rm -f request-rules-allowed.jsonl request-rules-logs.jsonl request-rules-noroute.jsonl check.jsonl
 ```
 
 <Flag name="-f">No question, and no error if a file is missing.</Flag>
@@ -270,7 +270,7 @@ rm -f act-c-allowed.jsonl act-c-logs.jsonl act-c-noroute.jsonl check.jsonl
 
 </Command>
 
-Claude Code also kept a transcript of each of these runs in Box storage, with the same content as the stream files. Storage is kept between runs, so deleting the streams leaves them there. [Act b1](/part-2/act-b1/#the-transcripts-in-storage) explains the folder, and why `box profile reset` would remove more than the transcripts.
+Claude Code also kept a transcript of each of these runs in Box storage, with the same content as the stream files. Storage is kept between runs, so deleting the streams leaves them there. [The opaque-execute act](/part-2/opaque-execute/#the-transcripts-in-storage) explains the folder, and why `box profile reset` would remove more than the transcripts.
 
 <Command what="Lists the transcripts kept in the profile's storage. It changes nothing.">
 
@@ -294,13 +294,13 @@ rm -r "$BOX_HOME/storage/ws/default/agent/config/projects"
 
 ## What to remember
 
-- Act c keeps the shape of code mode: `search` to find the operation, `execute` to do the work.
+- The request-rules act keeps the shape of code mode: `search` to find the operation, `execute` to do the work.
 - The script runs in the box, so each API request is a decision at the gateway.
 - The allowed task needed two `GET`s; both were permitted by the route, because no `forbid` matched.
 - The logs query was refused at the gateway; `box runs history` names one rule, the record names both.
 - A permitted read can still return personal data. The policy decides requests, not responses.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/cli.md" source="Box docs">The box CLI: `box run`, `box runs list`, `box runs history`</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/telemetry.md" source="Box docs">Telemetry: what `records.jsonl` holds</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/cli/" source="Box docs">The box CLI: `box run`, `box runs list`, `box runs history`</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/record-telemetry/" source="Box docs">Telemetry: what `records.jsonl` holds</ReadMore>
 <ReadMore href="https://code.claude.com/docs/en/cli-reference" source="Claude Code docs">Claude Code CLI reference: the flags used here</ReadMore>
 <ReadMore href="/part-5/egress-policy/" source="This workshop">Network rules for each API request</ReadMore>

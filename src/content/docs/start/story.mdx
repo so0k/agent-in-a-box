@@ -77,14 +77,18 @@ Your question on every page is: what can the agent still do, and what does it co
 
 The outcomes below are the ones measured for this workshop (the numbers are on [Measurements](/results/measurements/)). Each act page shows the runs in full.
 
+<div class="aib-acts-1">
+
 | Act | The set-up | What it shows |
 |---|---|---|
-| [a](/part-1/act-a/) | Claude Code and Cloudflare's server, no box. | Both tasks are done. The logs task returns log lines. Nothing on the developer's side decides or records which API calls the scripts made. |
-| [b1](/part-2/act-b1/) | The same server, the agent inside a box, `execute` permitted. | Both tasks are still done and the logs still come back. Box records each tool call, but all it sees is "`execute` was called", not what the script did. |
-| [b2](/part-3/act-b2/) | A rule refuses `execute` by name. | Both tasks are refused, the harmless one too. Control costs usefulness. |
-| [b3](/part-4/act-b3/) | The server offers one tool per API operation (3,053 tools); a rule allows a short list of read tools. | The logs tool is refused by name. The control is precise, but each run carries about 240,000 input tokens and a wait while Box prepares the tools; and the agent must pick a tool that is on the list. |
-| [b3-args](/part-4/act-b3-args/) | A rule on one tool's arguments. | The same tool is refused on another account and permitted on the workshop's account. |
-| [c](/part-5/act-c/) | A local MCP server inside the box runs the agent's script; Box decides each API request at its network gateway. | The allowed task is done in one `execute`. The logs request is refused at the gateway, by method and path. |
+| [token-scope](/part-1/token-scope/) | Claude Code and Cloudflare's server, no box. | Both tasks are done. The logs task returns log lines. Nothing on the developer's side decides or records which API calls the scripts made. |
+| [opaque-execute](/part-2/opaque-execute/) | The same server, the agent inside a box, `execute` permitted. | Both tasks are still done and the logs still come back. Box records each tool call, but all it sees is "`execute` was called", not what the script did. |
+| [deny-execute](/part-3/deny-execute/) | A rule refuses `execute` by name. | Both tasks are refused, the harmless one too. Control costs usefulness. |
+| [tool-allowlist](/part-4/tool-allowlist/) | The server offers one tool per API operation (3,053 tools); a rule allows a short list of read tools. | The logs tool is refused by name. The control is precise, but each run carries about 240,000 input tokens and a wait while Box prepares the tools; and the agent must pick a tool that is on the list. |
+| [argument-rules](/part-4/argument-rules/) | A rule on one tool's arguments. | The same tool is refused on another account and permitted on the workshop's account. |
+| [request-rules](/part-5/request-rules/) | A local MCP server inside the box runs the agent's script; Box decides each API request at its network gateway. | The allowed task is done in one `execute`. The logs request is refused at the gateway, by method and path. |
+
+</div>
 
 ## What to remember
 

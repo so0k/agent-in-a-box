@@ -13,7 +13,7 @@ import { PartProgress, Pieces, Seat, ReadMore } from '~/components';
 
 <PartProgress current="part-2/what-box-contains" />
 
-Act a showed an agent with a broad token and nothing around it. This page explains what a sandbox has to contain so that something can decide on the security engineer's behalf: the files the agent sees, its network, its secrets, its tools, and a record of every decision. After it you will know which part of Box does which job, so that the hands-on pages that follow read as one design rather than a list of settings.
+The token-scope act showed an agent with a broad token and nothing around it. This page explains what a sandbox has to contain so that something can decide on the security engineer's behalf: the files the agent sees, its network, its secrets, its tools, and a record of every decision. After it you will know which part of Box does which job, so that the hands-on pages that follow read as one design rather than a list of settings.
 
 <Pieces stage={2} />
 
@@ -119,11 +119,11 @@ The agent still starts in your project folder and still reaches the model and th
 - The box CLI turns your profile into the `box.toml` and `policy.dw` that Box Core enforces.
 - On macOS, Seatbelt enforces the sandbox through a trampoline, and Box fails closed when it cannot apply it.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/how-box-works.md" source="Box docs">How Box works (CLI)</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/how-box-works/" source="Box docs">How Box works (CLI)</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/architecture.md" source="Box docs">Architecture: sandboxes and the trusted process</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/security.md" source="Box docs">Security: what each tier governs</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/security/" source="Box docs">Security: what each tier governs</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/credentials.md" source="Box docs">How Box keeps credentials out of the box</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/egress.md" source="Box docs">Egress and credentials</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/network-and-credentials/" source="Box docs">Egress and credentials</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/macos-enforcement.md" source="Box docs">How Box enforces restrictions on macOS</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/telemetry.md" source="Box docs">Telemetry and records</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/limitations.md" source="Box docs">Limitations: what a box does not protect</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/record-telemetry/" source="Box docs">Telemetry and records</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/limitations/" source="Box docs">Limitations: what a box does not protect</ReadMore>

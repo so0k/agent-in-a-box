@@ -9,6 +9,7 @@ sidebar:
     class: "aib-badge aib-badge-handson"
 ---
 
+import { FileTree } from '@astrojs/starlight/components';
 import { PartProgress, Pieces, CatchUp, Iteration, Command, Flag, Why, ReadMore, Expect, Seat } from '~/components';
 
 <PartProgress current="part-5/local-execute" />
@@ -17,7 +18,7 @@ After this page you will understand the one new piece this workshop proposes: an
 
 <CatchUp>
 
-These are the files as they stand at the end of act b3-args. The profile and the `.dw` files live in `$HOME/box-ws/profiles/ws/`, the JSON files in `$HOME/leaderboard-ops/`.
+These are the files as they stand at the end of the argument-rules act. The profile and the `.dw` files live in `$HOME/box-ws/profiles/ws/`, the JSON files in `$HOME/leaderboard-ops/`.
 
 ```toml title="$HOME/box-ws/profiles/ws/profile.toml"
 packs = ["@box/base"]
@@ -119,15 +120,15 @@ forbid (principal, action == cloudflare::Action::"execute", resource);
 
 <Pieces stage={5} />
 
-New in the picture: the local exec proxy, an MCP server that runs inside the box in a sandbox of its own, and a direct line from the egress gateway to the Cloudflare API. The vendor's MCP server is drawn dashed: it is not on the path of act c.
+New in the picture: the local exec proxy, an MCP server that runs inside the box in a sandbox of its own, and a direct line from the egress gateway to the Cloudflare API. The vendor's MCP server is drawn dashed: it is not on the path of the request-rules act.
 
 ## Where Part 4 left the two seats
 
 Each act so far traded one thing for another.
 
-- In act b1 the vendor's `execute` ran the agent's script on Cloudflare's side. Box saw one `mcp:call` for `execute` and no request to `api.cloudflare.com` at all. The logs came back.
-- In act b2 the security engineer refused `execute` by name. Both tasks were refused, the harmless one too.
-- In acts b3 and b3-args the vendor's server offered one tool per API operation, 3,053 of them. The policy could decide each operation and even its arguments. The developer paid for it: about 240,000 input tokens and 75 to 85 seconds per run, measured on the newer builds (see [Measurements](/results/measurements/)).
+- In the opaque-execute act the vendor's `execute` ran the agent's script on Cloudflare's side. Box saw one `mcp:call` for `execute` and no request to `api.cloudflare.com` at all. The logs came back.
+- In the deny-execute act the security engineer refused `execute` by name. Both tasks were refused, the harmless one too.
+- In the tool-allowlist and argument-rules acts the vendor's server offered one tool per API operation, 3,053 of them. The policy could decide each operation and even its arguments. The developer paid for it: about 240,000 input tokens and 75 to 85 seconds per run, measured on the newer builds (see [Measurements](/results/measurements/)).
 
 The question for Part 5: can the developer keep the small tool list of code mode while the security engineer still decides every API request?
 
@@ -137,7 +138,7 @@ Code mode gives the agent two tools. `search` finds an operation in the API's de
 
 What matters for the security engineer is where the script runs.
 
-| | Vendor's `execute` (acts b1, b2) | Local `execute` (act c) |
+| | Vendor's `execute` (opaque-execute, deny-execute) | Local `execute` (request-rules) |
 |---|---|---|
 | Where the script runs | on Cloudflare's side, behind `mcp.cloudflare.com` | inside the box, in the exec proxy's own sandbox |
 | What leaves the box | one MCP request that holds the whole script | one HTTPS request per API call the script makes |
@@ -295,7 +296,7 @@ A rule for a server the profile no longer declares cannot load, and the `MCP_TIM
 
 <Fragment slot="alternative">
 
-Keep `[mcp.cloudflare]` and its rules beside the proxy. Then the box still lets the agent reach `mcp.cloudflare.com`, and the vendor's `execute`, with its calls out of Box's sight, is one tool call away again. Act c is about one path, so the vendor leaves it.
+Keep `[mcp.cloudflare]` and its rules beside the proxy. Then the box still lets the agent reach `mcp.cloudflare.com`, and the vendor's `execute`, with its calls out of Box's sight, is one tool call away again. The request-rules act is about one path, so the vendor leaves it.
 
 </Fragment>
 
@@ -321,6 +322,34 @@ Keep `[mcp.cloudflare]` and its rules beside the proxy. Then the box still lets 
 - `"exec-proxy"` is the server's name. Claude Code names its tools after it: `mcp__exec-proxy__search` and `mcp__exec-proxy__execute`.
 - `"command": "node"` is a bare program name. Claude Code looks it up on its own `PATH`.
 - `"args"` holds one argument, the proxy's entry file. Claude Code fills in `${HOME}` from its environment.
+
+The new file sits in the workspace, and its argument points into the copy of the proxy you cloned in [Requirements](/start/requirements/#the-exec-proxy-repository-for-part-5):
+
+<FileTree>
+
+- box-ws/
+  - profiles/
+    - ws/
+      - profile.toml you edit this
+      - no-remote-execute.dw no longer listed
+      - operate-tools.dw no longer listed
+      - args.dw no longer listed
+  - storage/ kept between runs
+  - r/ one folder per run
+- leaderboard-ops/ the workspace
+  - cloudflare-code-mode.json
+  - cloudflare-per-endpoint.json
+  - **exec-proxy.json** the exec proxy, for Claude Code
+- box-exec-proxy/ the proxy's repository
+  - proxy/ the server's code
+    - **exec-proxy** the program that starts the proxy
+    - lib/ the two tools and the sandbox
+  - spec/
+    - **spec.json** the API description search reads
+    - …
+  - …
+
+</FileTree>
 
 **The run.** The free check of this part, the first command on this page.
 
@@ -573,7 +602,7 @@ Box now runs the code the model wrote, but inside the box, in a sandbox of its o
 </Seat>
 <Seat who="developer">
 
-The agent has the same two-tool shape as code mode: find the operation with `search`, do the work with `execute`. The proxy's tool list is 6,071 bytes, about 1,500 tokens by a bytes-divided-by-four estimate (not counted with the token counter). In the box 0.1.8 runs, the first model request of act c was 2,263 input tokens in all, system prompt included. The server is ready in seconds, not after a minute of staging.
+The agent has the same two-tool shape as code mode: find the operation with `search`, do the work with `execute`. The proxy's tool list is 6,071 bytes, about 1,500 tokens by a bytes-divided-by-four estimate (not counted with the token counter). In the box 0.1.8 runs, the first model request of the request-rules act was 2,263 input tokens in all, system prompt included. The server is ready in seconds, not after a minute of staging.
 
 </Seat>
 
@@ -585,8 +614,8 @@ The agent has the same two-tool shape as code mode: find the operation with `sea
 - The server's network is contained by default, so every request a script makes goes to the egress gateway.
 - The proxy holds no policy and no real secret. Box decides; the proxy reports.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp.md" source="Box docs">MCP server configuration: stdio servers, aliases, filesystem and network</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference: placeholders and `[mcp.<name>]` in a profile</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/add-an-mcp-server/" source="Box docs">MCP server configuration: stdio servers, aliases, filesystem and network</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/profiles/" source="Box docs">Profile reference: placeholders and `[mcp.<name>]` in a profile</ReadMore>
 <ReadMore href="https://blog.cloudflare.com/code-mode/" source="Cloudflare blog">Code Mode, the idea the proxy copies</ReadMore>
 <ReadMore href="https://github.com/cloudflare/mcp" source="Cloudflare on GitHub">Cloudflare's MCP server, whose tool shapes the proxy copies</ReadMore>
 <ReadMore href="https://www.anthropic.com/engineering/code-execution-with-mcp" source="Anthropic engineering">Code execution with MCP</ReadMore>

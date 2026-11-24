@@ -70,6 +70,13 @@
 	color: #fff;
 }
 
+/* Tables whose column N holds act names: wide enough that no name breaks at its hyphen. */
+.aib-acts-1 :is(td, th):nth-child(1),
+.aib-acts-2 :is(td, th):nth-child(2),
+.aib-acts-3 :is(td, th):nth-child(3) {
+	min-width: 8.5rem;
+}
+
 /* Shared look of the workshop's MDX components. */
 .aib-panel {
 	border: 1px solid var(--aib-outline);

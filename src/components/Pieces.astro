@@ -7,12 +7,12 @@
  * to the same picture.
  *
  * `highlight` draws the path one act's requests take, with an X where a
- * request is refused. Act a has no box, so it is drawn on stage 1 only.
- * The other acts need at least their own stage: b1 2, b2 3, b3 4, b3-args 4, c 5.
+ * request is refused. The token-scope act has no box, so it is drawn on stage 1
+ * only. The other acts need at least the stage of their part (see ACT_STAGE).
  *
  * Usage (MDX):
  *   <Pieces stage={1} />
- *   <Pieces stage={3} highlight="b2" />
+ *   <Pieces stage={3} highlight="deny-execute" />
  *   <Pieces stage={5} />            (the full picture)
  */
 import type { ActId } from './workshop-map';
@@ -26,9 +26,16 @@ interface Props {
 const { stage, highlight, caption } = Astro.props;
 
 if (![1, 2, 3, 4, 5].includes(stage)) throw new Error(`<Pieces>: stage must be 1 to 5, got ${stage}`);
-const ACT_STAGE: Record<ActId, number> = { a: 1, b1: 2, b2: 3, b3: 4, 'b3-args': 4, c: 5 };
+const ACT_STAGE: Record<ActId, number> = {
+	'token-scope': 1,
+	'opaque-execute': 2,
+	'deny-execute': 3,
+	'tool-allowlist': 4,
+	'argument-rules': 4,
+	'request-rules': 5,
+};
 if (highlight && !(highlight in ACT_STAGE)) throw new Error(`<Pieces>: unknown highlight "${highlight}"`);
-if (highlight === 'a' && stage !== 1) throw new Error('<Pieces>: highlight="a" has no box; use stage={1}');
+if (highlight === 'token-scope' && stage !== 1) throw new Error('<Pieces>: highlight="token-scope" has no box; use stage={1}');
 if (highlight && stage < ACT_STAGE[highlight])
 	throw new Error(`<Pieces>: highlight="${highlight}" needs stage ${ACT_STAGE[highlight]} or later, got ${stage}`);
 
@@ -73,7 +80,7 @@ const PIECES: Piece[] = [
 		w: 230,
 		h: 66,
 		title: ['Cloudflare MCP server'],
-		sub: (s) => (s < 4 ? ['code mode: search, execute'] : s === 4 ? ['per-endpoint mode:', '3,053 tools'] : ['per-endpoint mode;', "not on act c's path"]),
+		sub: (s) => (s < 4 ? ['code mode: search, execute'] : s === 4 ? ['per-endpoint mode:', '3,053 tools'] : ['per-endpoint mode; not', 'on the request-rules path']),
 		desc: "Cloudflare's MCP server",
 		off: (s) => s >= 5,
 	},
@@ -128,8 +135,8 @@ type Act = {
 const BOXED = ['key_term', 'term_box', 'term_claude', 'boxcore_claude', 'boxcore_secrets', 'secrets_gateway', 'claude_gateway', 'gateway_anth'];
 const AT_VENDOR = { x: 665, y: 263 };
 const ACTS: Record<ActId, Act> = {
-	a: {
-		name: "Act a: the vendor's server, no box",
+	'token-scope': {
+		name: "token-scope: the vendor's server, no box",
 		edges: ['key_term', 'term_claude', 'direct_anth', 'direct_mcp', 'cfmcp_cfapi', 'cfapi_app'],
 		refusals: [],
 		outcome: 'The logs come back to the agent. Nothing between the agent and Cloudflare decides anything.',
@@ -140,8 +147,8 @@ const ACTS: Record<ActId, Act> = {
 			"The server runs the agent's script against the Cloudflare API, which reads the sample app's logs.",
 		],
 	},
-	b1: {
-		name: 'Act b1: in a box, execute permitted',
+	'opaque-execute': {
+		name: 'opaque-execute: in a box, execute permitted',
 		edges: [...BOXED, 'gateway_mcp', 'cfmcp_cfapi', 'cfapi_app', 'gateway_policy', 'policy_records'],
 		refusals: [],
 		outcome: 'The logs still come back. Box saw one permitted tool call, not what the script did.',
@@ -153,21 +160,21 @@ const ACTS: Record<ActId, Act> = {
 			"The server runs the agent's script against the Cloudflare API, which reads the sample app's logs.",
 		],
 	},
-	b2: {
-		name: 'Act b2: execute forbidden by name',
+	'deny-execute': {
+		name: 'deny-execute: execute forbidden by name',
 		edges: [...BOXED, 'gateway_mcp', 'gateway_policy', 'policy_records'],
 		refusals: [AT_VENDOR],
 		refusalLabel: 'execute refused',
 		outcome: 'A forbid rule refuses execute at the gateway. Both tasks are refused: the allowed one too.',
 		steps: [
-			"Box starts Claude Code in the agent's sandbox, as in act b1.",
+			"Box starts Claude Code in the agent's sandbox, as in the opaque-execute act.",
 			'The gateway forwards the model calls to the Anthropic API.',
 			'For the Cloudflare MCP server the gateway asks the policy engine to decide mcp:call for execute.',
 			'A forbid rule on the tool name matches. The request never reaches the server, and the refusal is recorded.',
 		],
 	},
-	b3: {
-		name: 'Act b3: an allow-list of tool names',
+	'tool-allowlist': {
+		name: 'tool-allowlist: an allow-list of tool names',
 		edges: [...BOXED, 'gateway_mcp', 'cfmcp_cfapi', 'cfapi_app', 'gateway_catalog', 'catalog_policy', 'gateway_policy', 'policy_records'],
 		refusals: [AT_VENDOR],
 		refusalLabel: 'logs tool refused',
@@ -179,21 +186,21 @@ const ACTS: Record<ActId, Act> = {
 			'The logs tool is not on the allow-list. Its call is refused at the gateway and recorded.',
 		],
 	},
-	'b3-args': {
-		name: 'Act b3-args: one tool on one account',
+	'argument-rules': {
+		name: 'argument-rules: one tool on one account',
 		edges: [...BOXED, 'gateway_mcp', 'cfmcp_cfapi', 'cfapi_app', 'gateway_catalog', 'catalog_policy', 'gateway_policy', 'policy_records'],
 		refusals: [AT_VENDOR],
 		refusalLabel: 'other account refused',
 		outcome: "workers_deployments_list is permitted on the sample app's account and refused on any other account.",
 		steps: [
-			'As in act b3, the catalog gives the policy engine a typed schema for each tool.',
+			'As in the tool-allowlist act, the catalog gives the policy engine a typed schema for each tool.',
 			"A rule reads the tool call's account_id argument.",
 			"The call with the sample app's account is permitted and reaches the Cloudflare API.",
 			'The same call with another account is refused at the gateway and recorded.',
 		],
 	},
-	c: {
-		name: 'Act c: code mode inside the box',
+	'request-rules': {
+		name: 'request-rules: code mode inside the box',
 		edges: [...BOXED, 'claude_broker', 'broker_proxy', 'broker_policy', 'proxy_gateway', 'gateway_cfapi', 'cfapi_app', 'gateway_policy', 'policy_records'],
 		refusals: [{ x: 675, y: 345 }],
 		refusalLabel: 'logs request refused',
@@ -219,7 +226,7 @@ const isNew = (s: number) => stage > 1 && s === stage;
 const subOf = (p: Piece) => (typeof p.sub === 'function' ? p.sub(stage) : (p.sub ?? []));
 const uid = `pc${stage}${highlight ?? ''}-${Math.random().toString(36).slice(2, 8)}`.replace(/[^a-z0-9-]/gi, '');
 const newPieces = pieces.filter((p) => isNew(p.stage) || p.changed === stage);
-const actWord = act ? act.name.split(':')[0].toLowerCase() : '';
+const actWord = highlight ? `the ${highlight} act` : '';
 const titleText = `Architecture, stage ${stage} of 5${act ? `, with the path of ${actWord}` : ''}`;
 
 // Legend items, laid out in the free top-right band.
@@ -299,7 +306,7 @@ const legendPos = [
 					const firstY = p.y + p.h / 2 - ((lines - 1) * lineH) / 2 + 5;
 					const fresh = isNew(p.stage);
 					const changed = p.changed === stage;
-					const off = !!p.off?.(stage) && (highlight === undefined || highlight === 'c');
+					const off = !!p.off?.(stage) && (highlight === undefined || highlight === 'request-rules');
 					return (
 						<g class:list={['aib-pc-node', { 'is-new': fresh, 'is-changed': changed, 'is-off': off }]}>
 							<rect x={p.x} y={p.y} width={p.w} height={p.h} rx="4" />
@@ -383,7 +390,7 @@ const legendPos = [
 							{p.desc}
 							{isNew(p.stage) && ' (new at this stage)'}
 							{p.changed === stage && ' (changed at this stage: it now runs in per-endpoint mode)'}
-							{p.off?.(stage) && " (not on act c's path)"}
+							{p.off?.(stage) && ' (not on the path of the request-rules act)'}
 						</li>
 					))
 				}

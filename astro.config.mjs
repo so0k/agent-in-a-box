@@ -12,6 +12,8 @@ export default defineConfig({
 	site: 'https://so0k.github.io',
 	base: '/agent-in-a-box',
 	server: { port: 4321, host: '127.0.0.1' },
+	// WATCH_POLL=1 polls for file changes, for machines where the dev server does not reload on save.
+	vite: process.env.WATCH_POLL ? { server: { watch: { usePolling: true, interval: 300 } } } : {},
 	integrations: [
 		baseLinks(),
 		starlight({
@@ -37,7 +39,7 @@ export default defineConfig({
 				},
 				{
 					label: 'Part 1, An agent with a broad token',
-					items: ['part-1/mcp-and-code-mode', 'part-1/act-a'],
+					items: ['part-1/mcp-and-code-mode', 'part-1/token-scope'],
 				},
 				{
 					label: 'Part 2, Put the agent in a box',
@@ -46,25 +48,25 @@ export default defineConfig({
 						'part-2/first-profile',
 						'part-2/secrets-and-egress',
 						'part-2/mcp-through-the-broker',
-						'part-2/act-b1',
+						'part-2/opaque-execute',
 					],
 				},
 				{
 					label: 'Part 3, Write the policy',
-					items: ['part-3/policy-basics', 'part-3/act-b2'],
+					items: ['part-3/policy-basics', 'part-3/deny-execute'],
 				},
 				{
 					label: 'Part 4, One tool per operation',
 					items: [
 						'part-4/per-endpoint-catalog',
-						'part-4/act-b3',
+						'part-4/tool-allowlist',
 						'part-4/policy-on-arguments',
-						'part-4/act-b3-args',
+						'part-4/argument-rules',
 					],
 				},
 				{
 					label: 'Part 5, Bring code mode into the box',
-					items: ['part-5/local-execute', 'part-5/egress-policy', 'part-5/act-c'],
+					items: ['part-5/local-execute', 'part-5/egress-policy', 'part-5/request-rules'],
 				},
 				{
 					label: 'Results',

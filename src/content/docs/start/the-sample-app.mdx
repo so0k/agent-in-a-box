@@ -77,7 +77,7 @@ A **Durable Object** is a small stateful object with a name. Every request for t
 | Durable Object storage | The same name and email, endpoints, verdicts | Yes |
 | The dashboard | Names, emails, endpoints | Yes, behind a secret |
 | KV `box-poc-workshop-content` | The 40 workshop pages and their checks | No: public content |
-| The Worker's script, settings, deployments, versions | Code, bindings, deployment history | Not attendee data. The deployment history does name the person who deployed: in act c an allowed read returned the deployer's email address (measured). |
+| The Worker's script, settings, deployments, versions | Code, bindings, deployment history | Not attendee data. The deployment history does name the person who deployed: in the request-rules act an allowed read returned the deployer's email address (measured). |
 
 The logs events that carry a name or an email are `session.board_joined`, `session.board_left`, `session.endpoint_saved`, `session.endpoint_refused`, `session.step_advanced` and `session.seeded` (from the `logEvent` calls in `demo/app/src/index.ts`). Tokens are never logged. Whether Cloudflare's own request entries in the logs carry client IP addresses was not checked.
 
@@ -123,14 +123,18 @@ These are the constraints in plain words, each with its reason. The later pages 
 
 Where each constraint becomes a rule:
 
+<div class="aib-acts-2">
+
 | Constraint | Act | The rule you write |
 |---|---|---|
-| 2, 3, 4 (blunt: everything at once) | [b2](/part-3/act-b2/) | `no_hidden_api_calls`: refuse the vendor's `execute` tool, because Box cannot see what its script does |
-| 1 to 4 | [b3](/part-4/act-b3/) | `operate_tools_only`: of the 3,053 tools, only six read tools may run |
-| 5 | [b3-args](/part-4/act-b3-args/) | `this_account_only`: `workers_deployments_list` runs only on the workshop's account |
-| 1 to 5 | [c](/part-5/act-c/) | `operate_requests_only` and `no_worker_logs`: two read requests are allowed; every other Cloudflare API request is refused, and the logs path has a rule of its own |
+| 2, 3, 4 (blunt: everything at once) | [deny-execute](/part-3/deny-execute/) | `no_hidden_api_calls`: refuse the vendor's `execute` tool, because Box cannot see what its script does |
+| 1 to 4 | [tool-allowlist](/part-4/tool-allowlist/) | `operate_tools_only`: of the 3,053 tools, only six read tools may run |
+| 5 | [argument-rules](/part-4/argument-rules/) | `this_account_only`: `workers_deployments_list` runs only on the workshop's account |
+| 1 to 5 | [request-rules](/part-5/request-rules/) | `operate_requests_only` and `no_worker_logs`: two read requests are allowed; every other Cloudflare API request is refused, and the logs path has a rule of its own |
 
-The rules in this workshop are deliberately narrower than the full list: in act c only two reads are allowed, the Worker list and the deployments of `box-poc-workshop`, because those are what the allowed task needs.
+</div>
+
+The rules in this workshop are deliberately narrower than the full list: in the request-rules act only two reads are allowed, the Worker list and the deployments of `box-poc-workshop`, because those are what the allowed task needs.
 
 <Seat who="security">
 

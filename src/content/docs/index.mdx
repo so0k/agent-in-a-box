@@ -1,34 +1,40 @@
 ---
 # Working title and subtitle: change them here and in src/site.config.mjs.
-title: "Agent in a Box: sandboxing AI coding agents with Strands Box"
-description: "One sandbox, two seats: the security engineer's and the developer's."
+title: "Understanding Strands Box by example"
+description: "Understanding how to sandbox and apply policies for Agentic adoption across enterprise teams."
 hero:
-  tagline: "One sandbox, two seats: the security engineer's and the developer's."
+  tagline: "A shared policy language and sandboxing tool for Agent adoption across enterprise teams."
 sidebar:
   label: "Welcome"
   order: 1
 ---
 
-import { CardGrid, LinkCard, LinkButton } from '@astrojs/starlight/components';
+import { Aside, CardGrid, LinkCard, LinkButton, Steps } from '@astrojs/starlight/components';
 import { PartProgress, Pieces, Seat, ReadMore } from '~/components';
 
 <PartProgress current="index" />
 
-This site explains how a sandbox for an AI coding agent works. It does that by solving one problem in stages, and by looking at every stage from two seats. After this page you will know the problem, who the site is written for, and how its pages fit together.
+This guided workshop explains how to sandbox your AI coding agent. It does so by solving one problem in stages, and by looking at every stage from different perspectives. On this page we go through the problem, who the workshop is for, and how every piece fits together.
 
-## The problem in five lines
+## The problem
 
-1. A developer wants Claude Code, a coding agent, to help operate a small app that runs on Cloudflare.
-2. The agent reaches Cloudflare through an MCP server: a program that offers an agent a set of tools it can call.
-3. Cloudflare's own MCP server offers one generic tool, `execute`, that runs a script against the whole Cloudflare API.
-4. A security engineer must be able to allow or refuse each API operation, because the app's logs and database hold people's names and email addresses.
-5. We put the agent in a sandbox with Strands Box and find out, step by step, where a policy can make that decision and what each choice costs.
+<Steps>
+1. A developer wants [Claude Code](https://claude.com/product/claude-code), a coding agent, to help operate a small demo app that runs on [Cloudflare Workers](https://developers.cloudflare.com/workers/).
+2. The agent reaches Cloudflare through an [MCP server](https://modelcontextprotocol.io/): a program that provides the agent tools it can call.
+3. [Cloudflare's own MCP server](https://github.com/cloudflare/mcp) offers one generic tool, `execute`, that runs a script against __the whole Cloudflare API__.
+4. A security engineer must be able to __allow or refuse each API operation__,
+   
+   in the case of our sample app: the logs and database hold people's names and email addresses!
+5. We put the agent in a sandbox with [Strands Box](https://strandsagents.com/box/) and find out, step by step, where a policy can be applied and what each choice costs.
+</Steps>
 
+<Aside type="note">
 A **sandbox** is a boundary around a program that decides what it may read, write, run and reach on the network. **Strands Box** (Box for short) is an open source sandbox engine for AI agents. You drive it with the **box CLI**, the `box` command.
+</Aside>
 
-## Who it is for: two seats
+## The Perspectives:
 
-Every stage is told twice, once from each seat. The two cards below come back on every concept and act page. Only the requirements, set-up, builds-and-gaps and further-reading pages have none.
+Every stage is told from the perspective of a Developer and a Security Engineer. This is presented on every concept and act page as shown here.
 
 <Seat who="security">
 
@@ -41,30 +47,30 @@ You want the agent to get work done. On each page you ask: what can the agent st
 
 </Seat>
 
-The site is for people who want to understand the moving parts and the trade-offs. It is not a quick way to run a demo. Every command and every setting is explained: what it does, why it is chosen here, what the alternative would do, and where to read more.
+The site is for people who want to understand the moving parts and the trade-offs. Every command and every setting is explained: what it does, why it is chosen here, what the alternative would do, and where to read more.
 
-## What you will understand at the end
+## Your takeaways
 
-- What a box contains: the agent's files, its network, its secrets and its tools, and which part of Box enforces each.
-- How a Box profile and a policy file are built up, one setting and one rule at a time.
-- What Box can see of an MCP tool call, and why a generic `execute` tool hides the API calls that matter.
-- Three ways to put a decision on each Cloudflare operation (refuse the tool, one tool per operation, or decide each HTTP request) and what each costs the developer.
-- Where Box's records of decisions live, and how to read them with the box CLI.
-- Which parts of this set-up are local builds or proposals, and what a released Box still lacks.
+- **What is a Box**: Box contains the agent's files, its network, its secrets and its tools. We learn which part of Box enforces each.
+- **Writing Profiles and Policies**: How a Box profile and a policy file are built up.
+- **The ingredients**: What Box can see of an MCP tool call, and why a generic `execute` remote tool is hard to secure.
+- **Policy design**: Three ways to put a decision on each Cloudflare operation (refuse the tool, one tool per operation, or decide each HTTP request) and how it impacts the developer.
+- **How to Audit**: Where Box's records of decisions live, and how to read them with the box CLI.
+- **Gaps and What's next**: Which parts of this set-up are local builds or proposals, and what a released Box still lacks.
 
-## How the site is organised
+## The Pieces
 
-### Start, five parts, results
+### From start to Finish
 
 Start sets the scene. Five parts each answer one question, and each ends in one or two acts. Results puts the acts side by side.
 
 <CardGrid>
 	<LinkCard title="Start" description="Sets the scene: the story, the sample app the agent will help operate, what you need and the one-time set-up." href="/start/story/" />
-	<LinkCard title="Part 1, An agent with a broad token" description="Claude Code and Cloudflare's MCP server, no box. Ends in act a." href="/part-1/mcp-and-code-mode/" />
-	<LinkCard title="Part 2, Put the agent in a box" description="The same server, with the agent inside a box. Ends in act b1." href="/part-2/what-box-contains/" />
-	<LinkCard title="Part 3, Write the policy" description="A policy rule refuses <code>execute</code> by name. Ends in act b2." href="/part-3/policy-basics/" />
-	<LinkCard title="Part 4, One tool per operation" description="The server offers one tool per API operation, and a rule decides on tool names and arguments. Ends in acts b3 and b3-args." href="/part-4/per-endpoint-catalog/" />
-	<LinkCard title="Part 5, Bring code mode into the box" description="A local MCP server inside the box runs the agent's script, and each API request is decided at the network gateway. Ends in act c." href="/part-5/local-execute/" />
+	<LinkCard title="Part 1, An agent with a broad token" description="Claude Code and Cloudflare's MCP server, no box. Ends in the token-scope act." href="/part-1/mcp-and-code-mode/" />
+	<LinkCard title="Part 2, Put the agent in a box" description="The same server, with the agent inside a box. Ends in the opaque-execute act." href="/part-2/what-box-contains/" />
+	<LinkCard title="Part 3, Write the policy" description="A policy rule refuses <code>execute</code> by name. Ends in the deny-execute act." href="/part-3/policy-basics/" />
+	<LinkCard title="Part 4, One tool per operation" description="The server offers one tool per API operation, and a rule decides on tool names and arguments. Ends in the tool-allowlist and argument-rules acts." href="/part-4/per-endpoint-catalog/" />
+	<LinkCard title="Part 5, Bring code mode into the box" description="A local MCP server inside the box runs the agent's script, and each API request is decided at the network gateway. Ends in the request-rules act." href="/part-5/local-execute/" />
 	<LinkCard title="Results" description="Puts the acts side by side: the whole picture, the measurements, the gaps to a released Box, and further reading." href="/results/the-whole-picture/" />
 </CardGrid>
 
@@ -76,24 +82,28 @@ The badge after a page's name in the sidebar says what kind of page it is.
 |---|---|
 | Concept | Explains one idea when the story first needs it, and shows it in this workshop's real files or output. |
 | Hands-on | Builds part of the profile or the policy in small iterations. Each iteration is one change, one command, what you see, and why. |
-| Act a to Act c | One of the six moments where the agent runs a task. The page gathers your files, launches the agent, and shows what came back and what Box decided. |
+| Act | One of the six moments where the agent runs a task. The page gathers your files, launches the agent, and shows what came back and what Box decided. |
 
 Each hands-on and act page starts with a collapsed block called "your files at this point". It holds the complete files, so if you get lost you can paste them into your editor and carry on.
 
 ### The six acts
 
-| Act | Part | The set-up |
+<div class="aib-acts-1">
+
+| Act | Part | Where the decision is made |
 |---|---|---|
-| a | 1 | Claude Code and Cloudflare's MCP server, no box. |
-| b1 | 2 | The same server, with the agent inside a box. `execute` is permitted. |
-| b2 | 3 | A policy rule refuses `execute` by name. |
-| b3 | 4 | The server offers one tool per API operation; a rule allows a short list of tool names. |
-| b3-args | 4 | A rule on one tool's arguments: the tool may run on one account only. |
-| c | 5 | A local MCP server inside the box runs the agent's script; every API request it makes is decided at the box's network gateway. |
+| token-scope | 1 | Only in the API token's scope. Claude Code uses Cloudflare's MCP server with no box. |
+| opaque-execute | 2 | In the box, but Box sees only that `execute` was called, not what the script did. |
+| deny-execute | 3 | A policy rule refuses `execute` by name. |
+| tool-allowlist | 4 | An allow-list of tool names, with one tool per API operation. |
+| argument-rules | 4 | A rule on one tool's arguments: the tool may run on one account only. |
+| request-rules | 5 | A rule on each HTTP request at the box's egress gateway. The agent's script runs inside the box. |
+
+</div>
 
 What each act shows is on [the story](/start/story/) page.
 
-### A diagram that grows
+### Our evolving diagram
 
 The architecture diagram starts with the few pieces of a set-up without a sandbox. Each part adds pieces, and each page shows the diagram at its stage with the new pieces marked. This is the starting picture:
 
@@ -111,15 +121,19 @@ Most steps are checked with a **free check**: the command runs with an invalid m
 
 Reading time was not measured. What was measured is how long one run of each act took on the clock (from [Measurements](/results/measurements/)):
 
+<div class="aib-acts-3">
+
 | Part | Pages | Act | Wall time of one run, as measured |
 |---|---|---|---|
-| 1 | 2 | a | 10 s (allowed task), 13 s (logs task); no box, Claude Code 2.1.325 |
-| 2 | 5 | b1 | 22 s (logs task) |
-| 3 | 2 | b2 | 17 s (logs task) |
-| 4 | 4 | b3, b3-args | 75 s to 85 s per run; most of it is Box preparing the server's 3,053 tools before the agent may use them |
-| 5 | 3 | c | 10 s (allowed task), 19 s (logs task) |
+| 1 | 2 | token-scope | 10 s (allowed task), 13 s (logs task); no box, Claude Code 2.1.325 |
+| 2 | 5 | opaque-execute | 22 s (logs task) |
+| 3 | 2 | deny-execute | 17 s (logs task) |
+| 4 | 4 | tool-allowlist, argument-rules | 75 s to 85 s per run; most of it is Box preparing the server's 3,053 tools before the agent may use them |
+| 5 | 3 | request-rules | 10 s (allowed task), 19 s (logs task) |
 
-The times for b1 to c come from local box builds made before a released Box had what this workshop needs (the build this site uses among them), with Claude Code 2.1.330. [Builds and gaps](/results/builds-and-gaps/) explains the builds.
+</div>
+
+The times for the five boxed acts come from local box builds made before a released Box had what this workshop needs (the build this site uses among them), with Claude Code 2.1.330. [Builds and gaps](/results/builds-and-gaps/) explains the builds.
 
 ## What to remember
 
@@ -132,7 +146,7 @@ The times for b1 to c come from local box builds made before a released Box had 
 ## Read more
 
 <ReadMore href="https://github.com/strands-agents/box" source="Box docs">The Strands Box repository and its README</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/how-box-works.md" source="Box docs">How Box works, from the box CLI's point of view</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/how-box-works/" source="Box docs">How Box works, from the box CLI's point of view</ReadMore>
 <ReadMore href="/results/further-reading/" source="This workshop">Further reading, by topic</ReadMore>
 
 <LinkButton href="/start/story/" icon="right-arrow" iconPlacement="end">Start with the story</LinkButton>

@@ -334,7 +334,7 @@ export CLOUDFLARE_MCP_TOKEN="$(security find-generic-password -s box-poc-mcp-tok
 export CLOUDFLARE_API_TOKEN="$(security find-generic-password -s box-poc-agent-token -a box-exec-proxy-poc -w)"
 ```
 
-<Flag name="CLOUDFLARE_API_TOKEN">The token for direct calls to the Cloudflare API, which Box adds to each permitted request in act c.</Flag>
+<Flag name="CLOUDFLARE_API_TOKEN">The token for direct calls to the Cloudflare API, which Box adds to each permitted request in the request-rules act.</Flag>
 
 </Command>
 
@@ -363,7 +363,7 @@ Repeat it with `CLOUDFLARE_MCP_TOKEN` and `CLOUDFLARE_API_TOKEN`.
 
 <Why>
 
-The value travels from the keychain straight into the variable. It never appears on a command line (the process list shows only `security` and the service name), on the screen or in a file. Exported variables reach every program you start from this terminal: Claude Code in act a reads them directly, and in the box acts Box reads them and gives the agent stand-ins instead (Part 2, [secrets and egress](/part-2/secrets-and-egress/)).
+The value travels from the keychain straight into the variable. It never appears on a command line (the process list shows only `security` and the service name), on the screen or in a file. Exported variables reach every program you start from this terminal: Claude Code in the token-scope act reads them directly, and in the box acts Box reads them and gives the agent stand-ins instead (Part 2, [secrets and egress](/part-2/secrets-and-egress/)).
 
 <Fragment slot="alternative">
 
@@ -429,8 +429,8 @@ Leaving `BOX_HOME` unset uses `~/.strands/box`, shared with any other Box work y
 
 </Why>
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/files.md" source="Box docs">Where Box keeps its files</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/troubleshooting.md" source="Box docs">Troubleshooting, including the socket path limit</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/files/" source="Box docs">Where Box keeps its files</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/troubleshooting/" source="Box docs">Troubleshooting, including the socket path limit</ReadMore>
 
 </Iteration>
 
@@ -576,13 +576,13 @@ With this file saved, the two folders in your home hold this much:
 
 </FileTree>
 
-**The run.** Nothing to run yet. Act a's free check is the first command that reads this file.
+**The run.** Nothing to run yet. The token-scope act's free check is the first command that reads this file.
 
-**What we see.** Act a's free check shows the server as connected, which proves both the file and the MCP token.
+**What we see.** The token-scope act's free check shows the server as connected, which proves both the file and the MCP token.
 
 <Why>
 
-The same file works on the host (act a) and inside the box (Part 2). On the host the placeholder becomes the real token; inside the box it becomes Box's stand-in, because Box has replaced the variable's value before Claude Code starts. This was proven in acts a and b1.
+The same file works on the host (the token-scope act) and inside the box (Part 2). On the host the placeholder becomes the real token; inside the box it becomes Box's stand-in, because Box has replaced the variable's value before Claude Code starts. This was proven in the token-scope and opaque-execute acts.
 
 <Fragment slot="alternative">
 
@@ -652,6 +652,6 @@ cd "$HOME/leaderboard-ops"
 
 ## Read more
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/cli.md" source="Box docs">The box command reference, including its environment variables</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/getting-started.md" source="Box docs">Get started with the box CLI and Claude Code</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/cli/" source="Box docs">The box command reference, including its environment variables</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/quickstart/" source="Box docs">Get started with the box CLI and Claude Code</ReadMore>
 <ReadMore href="https://code.claude.com/docs/en/settings" source="Claude Code docs">Claude Code settings and environment variables</ReadMore>

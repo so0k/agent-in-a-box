@@ -1,24 +1,24 @@
 ---
-title: "Act b2: forbid execute by name"
+title: "deny-execute: forbid execute by name"
 description: "Write the rule that forbids execute. Both tasks are refused: control costs usefulness."
 sidebar:
-  label: "Act b2: forbid execute"
+  label: "deny-execute"
   order: 2
   badge:
-    text: "Act b2"
+    text: "Act"
     class: "aib-badge aib-badge-act"
 ---
 
 import { Aside, FileTree, Tabs, TabItem } from '@astrojs/starlight/components';
 import { PartProgress, Pieces, CatchUp, Iteration, Command, Flag, Why, ReadMore, Prompt, Expect, Seat, Measure } from '~/components';
 
-<PartProgress current="part-3/act-b2" />
+<PartProgress current="part-3/deny-execute" />
 
 In this act you write your first policy rule: a `forbid` that refuses the vendor's `execute` tool by name. You will see both tasks refused, the logs task and the allowed one, and you will see why: in code mode, `execute` is the only tool that does anything.
 
 ## Where we are in the story
 
-In act b1 the agent ran in a box, and the logs of the workshop progress tracker still came back, with whatever attendee names and emails they held. Box saw one `mcp:call` for `execute` and permitted it, because the script ran on Cloudflare's side where Box cannot look. The security engineer's first constraint is that the agent must not read the logs or the stored attendee data. The bluntest way to enforce it with what Box can see is to refuse `execute` altogether.
+In the opaque-execute act the agent ran in a box, and the logs of the workshop progress tracker still came back, with whatever attendee names and emails they held. Box saw one `mcp:call` for `execute` and permitted it, because the script ran on Cloudflare's side where Box cannot look. The security engineer's first constraint is that the agent must not read the logs or the stored attendee data. The bluntest way to enforce it with what Box can see is to refuse `execute` altogether.
 
 <CatchUp>
 
@@ -68,9 +68,9 @@ The terminal holds the exports from [Set-up](/start/setup/) and sits in `$HOME/l
 
 </CatchUp>
 
-<Pieces stage={3} highlight="b2" />
+<Pieces stage={3} highlight="deny-execute" />
 
-The pieces are the same as in act b1. What changes is the path: the request for `execute` now stops at the policy engine. Because Cloudflare's server is remote, the egress gateway asks for the decision (not the MCP broker), and the request never reaches Cloudflare.
+The pieces are the same as in the opaque-execute act. What changes is the path: the request for `execute` now stops at the policy engine. Because Cloudflare's server is remote, the egress gateway asks for the decision (not the MCP broker), and the request never reaches Cloudflare.
 
 ## Write the rule
 
@@ -135,7 +135,7 @@ box: error: ~/box-ws/profiles/ws/profile.toml:2: `policies[0]` = "no-remote-exec
 `policies` is the profile's list of rule files. A name without a folder is read from the profile's own folder, so the file belongs next to `profile.toml`. The name says what the file is for: no script runs remotely, out of Box's sight.
 
 <Fragment slot="alternative">
-Several files are allowed (`policies = ["a.dw", "b.dw"]`); Box joins them in list order. One file per constraint keeps each one easy to remove, which you will do in act b3.
+Several files are allowed (`policies = ["a.dw", "b.dw"]`); Box joins them in list order. One file per constraint keeps each one easy to remove, which you will do in the tool-allowlist act.
 </Fragment>
 </Why>
 
@@ -217,7 +217,7 @@ ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key box run ws --no-banner -- --bare 
 The rule names the tool in its head (`cloudflare::Action::"execute"`). That is the shortest rule that says "never this tool", and it is the form Box's MCP policy guide uses for refusing one tool. If it ever failed to load, Box would refuse every call to `execute` (a rule that names the tool in its head fails closed).
 
 <Fragment slot="alternative">
-The same constraint can be written on `mcp:call`: `forbid (principal, action == Box::Action::"mcp:call", resource) when { context.input.server == "cloudflare" && context.input has tool && context.input.tool == "execute" };`. It does not wait for the server's tool list. Not checked for this tool in this workshop; the same form is used in act b3.
+The same constraint can be written on `mcp:call`: `forbid (principal, action == Box::Action::"mcp:call", resource) when { context.input.server == "cloudflare" && context.input has tool && context.input.tool == "execute" };`. It does not wait for the server's tool list. Not checked for this tool in this workshop; the same form is used in the tool-allowlist act.
 </Fragment>
 </Why>
 
@@ -261,13 +261,13 @@ Claude Code asks whether to use the API key it found (press Up, then Enter for Y
 <Command what="Runs one task in the box and writes Claude Code's event stream to a file.">
 
 ```sh
-box run ws --no-banner -- --bare --strict-mcp-config --mcp-config cloudflare-code-mode.json --tools "" --allowedTools mcp__cloudflare --model claude-sonnet-5-5 --max-turns 10 --max-budget-usd 0.25 -p "Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > act-b2-logs.jsonl
+box run ws --no-banner -- --bare --strict-mcp-config --mcp-config cloudflare-code-mode.json --tools "" --allowedTools mcp__cloudflare --model claude-sonnet-5-5 --max-turns 10 --max-budget-usd 0.25 -p "Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > deny-execute-logs.jsonl
 ```
 
 <Flag name="--max-turns 10">A hard stop after ten model turns.</Flag>
 <Flag name="--max-budget-usd 0.25">Claude Code stops once the run has cost this much. It works only with `-p`.</Flag>
-<Flag name={'-p "..."'}>The task. For the allowed task, put the allowed sentence here and write to `act-b2-allowed.jsonl`.</Flag>
-<Flag name="> act-b2-logs.jsonl">The stream, to open with `less` afterwards. The clean-up step at the end of this page deletes these files: a stream can hold whatever the agent read.</Flag>
+<Flag name={'-p "..."'}>The task. For the allowed task, put the allowed sentence here and write to `deny-execute-allowed.jsonl`.</Flag>
+<Flag name="> deny-execute-logs.jsonl">The stream, to open with `less` afterwards. The clean-up step at the end of this page deletes these files: a stream can hold whatever the agent read.</Flag>
 
 </Command>
 
@@ -341,8 +341,8 @@ Both tasks fail, including the one the team agreed is fine. The logs task cost m
 
 **The takeaway:** refusing a tool by name is easy to write and hard to get around, but in code mode it refuses everything, so control costs usefulness.
 
-<Measure act="b2" task="logs (last hour)" turns={6} tokens="75,732 in, 1,715 out" cost="$0.0729" wall="22 s" build="pkg-fix" />
-<Measure act="b2" task="allowed" turns={2} tokens="4,826 in, 708 out" cost="$0.0090" wall="8 s" build="pkg-fix" />
+<Measure act="deny-execute" task="logs (last hour)" turns={6} tokens="75,732 in, 1,715 out" cost="$0.0729" wall="22 s" build="pkg-fix" />
+<Measure act="deny-execute" task="allowed" turns={2} tokens="4,826 in, 708 out" cost="$0.0090" wall="8 s" build="pkg-fix" />
 
 One run each, headless, on the workshop's build (`pkg-fix`, see [Builds and gaps](/results/builds-and-gaps/)). Input tokens count uncached, cache-write and cache-read tokens together.
 
@@ -351,7 +351,7 @@ One run each, headless, on the workshop's build (`pkg-fix`, see [Builds and gaps
 <Command what="Deletes this act's stream files and the free check's stream. A stream holds whatever the agent read.">
 
 ```sh
-rm -f act-b2-logs.jsonl act-b2-allowed.jsonl check.jsonl
+rm -f deny-execute-logs.jsonl deny-execute-allowed.jsonl check.jsonl
 ```
 
 <Flag name="-f">No question, and no error if a file is missing.</Flag>
@@ -359,7 +359,7 @@ rm -f act-b2-logs.jsonl act-b2-allowed.jsonl check.jsonl
 
 </Command>
 
-Claude Code also kept a transcript of each of these runs in Box storage, with the same content as the stream files. Storage is kept between runs, so deleting the streams leaves them there. [Act b1](/part-2/act-b1/#the-transcripts-in-storage) explains the folder, and why `box profile reset` would remove more than the transcripts.
+Claude Code also kept a transcript of each of these runs in Box storage, with the same content as the stream files. Storage is kept between runs, so deleting the streams leaves them there. [The opaque-execute act](/part-2/opaque-execute/#the-transcripts-in-storage) explains the folder, and why `box profile reset` would remove more than the transcripts.
 
 <Command what="Lists the transcripts kept in the profile's storage. It changes nothing.">
 
@@ -388,8 +388,8 @@ rm -r "$BOX_HOME/storage/ws/default/agent/config/projects"
 - A misspelled tool name loads with a warning and refuses nothing. Read the terminal after the first run.
 - In code mode one tool does all the work, so a rule on tool names can only allow everything or nothing.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp-policy.md" source="Box docs">Write policy for an MCP server</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy.md" source="Box docs">Box policy guide: how a refusal reads</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/policies.md" source="Box docs">Policies in a box CLI profile</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/write-mcp-policy/" source="Box docs">Write policy for an MCP server</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/policy/" source="Box docs">Box policy guide: how a refusal reads</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/policies/" source="Box docs">Policies in a box CLI profile</ReadMore>
 <ReadMore href="https://blog.cloudflare.com/code-mode-mcp/" source="Cloudflare blog">Code Mode: give agents an entire API in 1,000 tokens</ReadMore>
 <ReadMore href="/part-3/policy-basics/" source="This workshop">Policy basics</ReadMore>

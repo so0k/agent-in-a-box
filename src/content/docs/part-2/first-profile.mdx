@@ -14,7 +14,7 @@ import { PartProgress, Pieces, CatchUp, Iteration, Command, Flag, Why, ReadMore,
 
 <PartProgress current="part-2/first-profile" />
 
-After this page you will know what a Box profile is, where it lives, what packs and starters are, and what `box run` does when you press Enter. You will write the profile by hand, one setting at a time, until Claude Code starts inside a box. The story needs it now because every later act, from b1 to c, runs on this one profile, grown a little on each page.
+After this page you will know what a Box profile is, where it lives, what packs and starters are, and what `box run` does when you press Enter. You will write the profile by hand, one setting at a time, until Claude Code starts inside a box. The story needs it now because all five boxed acts run on this one profile, grown a little on each page.
 
 <CatchUp>
 
@@ -74,8 +74,8 @@ At the end of this page your Box home looks like this:
 
 The run folder layout is from the Box docs (`docs/cli/files.md`) and was checked by listing a run folder on this build.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/how-box-works.md" source="Box docs">How Box works: profiles, packs and the box</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/files.md" source="Box docs">Where Box keeps its files</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/how-box-works/" source="Box docs">How Box works: profiles, packs and the box</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/files/" source="Box docs">Where Box keeps its files</ReadMore>
 
 ## Packs and starters, and why we write the profile by hand
 
@@ -156,8 +156,8 @@ A profile must run one agent, and the only pack that runs Claude Code is `@box/c
 
 </Iteration>
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/starters.md" source="Box docs">Starters</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles.md" source="Box docs">Profiles</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/starters/" source="Box docs">Starters</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/profiles/" source="Box docs">Profiles</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/resources/packs/claude/README.md" source="Box docs">The @box/claude pack and what it imports</ReadMore>
 
 <Iteration n={2} title="An empty profile">
@@ -271,8 +271,8 @@ Note what was not needed: a `read` grant on the binary. The old launcher of this
 
 </Iteration>
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference: [agent], command and placeholders</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/cli.md" source="Box docs">The box CLI: box run and its flags</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/profiles/" source="Box docs">Profile reference: [agent], command and placeholders</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/cli/" source="Box docs">The box CLI: box run and its flags</ReadMore>
 
 ## What happens when you press Enter on box run
 
@@ -286,7 +286,7 @@ That one command did a lot. In order (from the Box docs, `docs/cli/cli.md` and `
 6. **Pass your arguments.** Everything after `--` is added at the `agent-args` slot. Box does not read or change them.
 7. **Wait.** Core runs until the agent exits, and `box run` exits with the agent's status. The run folder stays until you clean it up.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/how-box-works.md" source="Box docs">How Box works</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/how-box-works/" source="Box docs">How Box works</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/architecture.md" source="Box docs">Architecture: the agent's sandbox and the trusted process</ReadMore>
 
 ## Run Claude Code for real
@@ -354,7 +354,7 @@ Operating the leaderboard app needs no file changes in the operations folder: th
 
 </Iteration>
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference: [project]</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/profiles/" source="Box docs">Profile reference: [project]</ReadMore>
 <ReadMore href="https://code.claude.com/docs/en/cli-reference" source="Claude Code docs">Claude Code CLI reference</ReadMore>
 
 <Iteration n={5} title="A temporary folder">
@@ -401,7 +401,7 @@ A write grant on `/tmp` itself, in `[agent.filesystem]`. That folder is shared w
 
 </Iteration>
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference: [storage] and [agent.env]</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/profiles/" source="Box docs">Profile reference: [storage] and [agent.env]</ReadMore>
 
 <Iteration n={6} title="Claude Code's own configuration">
 
@@ -535,7 +535,7 @@ The `1` after `@box/base` is the pack's version. The options are the pack's inpu
 
 </Iteration>
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/packs.md" source="Box docs">Packs</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/packs/" source="Box docs">Packs</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/resources/packs/base/pack.toml" source="Box docs">The @box/base pack, the whole file</ReadMore>
 
 ## The two seats
@@ -555,6 +555,6 @@ Claude Code starts, but cannot work yet: it has no model key and no network. Eac
 - **Storage** keeps the agent's own folders between runs; each **run** gets a new box ID and a run folder.
 - `box profile show` checks a profile without starting anything. Run it after every change.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/files.md" source="Box docs">Where Box keeps its files</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/profiles/" source="Box docs">Profile reference</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/files/" source="Box docs">Where Box keeps its files</ReadMore>
 <ReadMore href="/part-2/what-box-contains/" source="This workshop">What a sandbox contains</ReadMore>

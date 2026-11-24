@@ -14,11 +14,11 @@ import { PartProgress, Pieces, Command, Flag, Why, ReadMore, Expect, Seat } from
 
 <PartProgress current="part-3/policy-basics" />
 
-After this page you can read and write a Box policy rule by hand: what each part of a rule stands for, how Box combines many rules into one decision, and how to check that a rule is in force. The story needs it now because act b1 ended with the logs of the workshop app on the developer's screen, and the security engineer's only way to stop that is a rule.
+After this page you can read and write a Box policy rule by hand: what each part of a rule stands for, how Box combines many rules into one decision, and how to check that a rule is in force. The story needs it now because the opaque-execute act ended with the logs of the workshop app on the developer's screen, and the security engineer's only way to stop that is a rule.
 
 <Pieces stage={3} />
 
-The picture is the one from act b1. Nothing is added on this page: we look inside one piece, the **policy engine**, and the files it reads. The policy engine is the part of Box that answers "permit or deny?" for every request the agent makes, and writes each answer to the records.
+The picture is the one from the opaque-execute act. Nothing is added on this page: we look inside one piece, the **policy engine**, and the files it reads. The policy engine is the part of Box that answers "permit or deny?" for every request the agent makes, and writes each answer to the records.
 
 ## You already have rules
 
@@ -35,7 +35,7 @@ box profile show ws --full
 
 </Command>
 
-Near the end of the output, under `# policy.dw`, are these five lines (copied from a run of `--full` on this build with the profile as it stands at the end of act b1):
+Near the end of the output, under `# policy.dw`, are these five lines (copied from a run of `--full` on this build with the profile as it stands at the end of the opaque-execute act):
 
 ```text title="Part of box profile show ws --full"
 @id("route_anthropic_connect") permit (principal, action == Box::Action::"net:connect", resource) when { (context.input.host == "api.anthropic.com" && context.input.port == 443) };
@@ -51,7 +51,7 @@ These rules are written in **Dogwood**, the policy language of Box. Dogwood is *
 
 ## The anatomy of a rule
 
-Take `mcp_cloudflare_call`, the rule that let act b1's `execute` run. Box prints it on one line. Spaces and line breaks do not matter in Cedar, so here it is laid out one element per line:
+Take `mcp_cloudflare_call`, the rule that let the opaque-execute act's `execute` run. Box prints it on one line. Spaces and line breaks do not matter in Cedar, so here it is laid out one element per line:
 
 ```text title="mcp_cloudflare_call, laid out"
 @id("mcp_cloudflare_call")
@@ -96,7 +96,7 @@ A condition reads the request's details from `context.input`. Which fields there
 A rule ends with `;`. Lines that start with `//` are comments and are ignored.
 
 <Why title="Why the generated rule has no tool in it">
-`mcp_cloudflare_call` checks only `server`. So it admits every method and every tool of the cloudflare server: `search`, `docs`, `execute` and the rest. That is why act b1 needed no policy file of yours, and why the logs came back.
+`mcp_cloudflare_call` checks only `server`. So it admits every method and every tool of the cloudflare server: `search`, `docs`, `execute` and the rest. That is why the opaque-execute act needed no policy file of yours, and why the logs came back.
 
 <Fragment slot="alternative">
 Box's docs show an allow-list written as a `permit` that names the tools. With the box CLI you cannot change the generated permit (it is written from the `[mcp.cloudflare]` table every run), so a restriction has to be a `forbid`. The next section shows why a second, narrower `permit` would not help.
@@ -118,7 +118,7 @@ The action is the part of a rule you always choose. Box defines ten built-in act
 | `mcp:call` | the MCP broker (a local server) or the egress gateway (a remote server such as Cloudflare's) | `server`, `method`, `tool?`, `prompt?`, `uri?` |
 | `<server>::Action::"<tool>"` | after `mcp:call` permits a tool call, one per tool | the tool's own arguments |
 
-The last row is the **per-tool action**. When Box identifies a server, it reads the server's list of tools and makes one action per tool, named after the server's table in the profile. For your profile that means `cloudflare::Action::"execute"`, `cloudflare::Action::"search"` and so on. A tool call is decided twice: first as an `mcp:call`, then, if that is permitted, as the tool's own action. Act b2 uses the second one.
+The last row is the **per-tool action**. When Box identifies a server, it reads the server's list of tools and makes one action per tool, named after the server's table in the profile. For your profile that means `cloudflare::Action::"execute"`, `cloudflare::Action::"search"` and so on. A tool call is decided twice: first as an `mcp:call`, then, if that is permitted, as the tool's own action. The deny-execute act uses the second one.
 
 In this workshop Claude Code runs with `--tools ""`, so it has no shell and never raises `fs:*` or `shell:*` requests. That is why no shell rule appears anywhere in the profile.
 
@@ -212,7 +212,7 @@ It loads, and it changes nothing: `mcp_cloudflare_call` still permits every tool
 
 ### Misspelling a tool name
 
-A per-tool rule that names a tool the server does not have pins nothing. Box prints the per-tool warning, `box profile show` still passes, and the real tool stays permitted. In other words a typo in a tool name **fails open**. You will see this happen on purpose in [act b2](/part-3/act-b2/).
+A per-tool rule that names a tool the server does not have pins nothing. Box prints the per-tool warning, `box profile show` still passes, and the real tool stays permitted. In other words a typo in a tool name **fails open**. You will see this happen on purpose in [the deny-execute act](/part-3/deny-execute/).
 
 <Aside type="note">
 The opposite mistake, a typo in an argument name, fails closed: every call to that tool is refused. Part 4 comes back to this on [Rules on a tool's arguments](/part-4/policy-on-arguments/).
@@ -234,12 +234,12 @@ Nothing changes for the agent until a rule is added. When one is, the agent gets
 - Declaring `[mcp.cloudflare]` generates `mcp_cloudflare_call`, which permits every tool. Restrictions are `forbid`s.
 - Policy files sit next to `profile.toml` and are listed in `policies`. Per-tool rules load during the run, so read the terminal for the per-tool warning.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy.md" source="Box docs">Box policy guide: rules, combining, refusals, temporal rules</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy.md#a-cap-written-as-a-permit" source="Box docs">Box policy guide: a cap written as a permit</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy/actions.md" source="Box docs">Action reference: every action and its fields</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/policies.md" source="Box docs">Policies in a box CLI profile</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/policies-reference.md" source="Box docs">Policies reference: file order and generated rule ids</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/tutorials/first-policy.md" source="Box docs">Tutorial: a first policy</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/policy/" source="Box docs">Box policy guide: rules, combining, refusals, temporal rules</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/policy/#a-cap-written-as-a-permit" source="Box docs">Box policy guide: a cap written as a permit</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/policy-actions/" source="Box docs">Action reference: every action and its fields</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/policies/" source="Box docs">Policies in a box CLI profile</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/policies/" source="Box docs">Policies reference: file order and generated rule ids</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/write-a-policy/" source="Box docs">Tutorial: a first policy</ReadMore>
 <ReadMore href="https://docs.cedarpolicy.com/policies/syntax-policy.html" source="Cedar docs">Basic policy syntax</ReadMore>
 <ReadMore href="https://docs.cedarpolicy.com/auth/authorization.html" source="Cedar docs">Authorization: default deny and forbid overrides permit</ReadMore>
 <ReadMore href="https://docs.cedarpolicy.com/policies/syntax-operators.html" source="Cedar docs">Operators</ReadMore>

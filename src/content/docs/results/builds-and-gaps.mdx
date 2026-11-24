@@ -25,7 +25,7 @@ All the local builds below are unreleased and carry only the linker's ad-hoc sig
 | **pkg-fix (the workshop's build)** | Public `strands-agents/box` main at `c70fec5` (#572) plus the `$defs` fix, built 2026-11-21 from an earlier round of the fix, as an uncommitted diff | The fix for three `$defs` constructs that stopped schema generation (below, gap 1). No other patch. `Cargo.lock` unchanged (`--locked` held) | Every command on this site; the curriculum's proofs (2026-11-22) |
 | pkg-main | Public main `c70fec5` plus an earlier local patch for the same problem (`core-01`) | The CLI as now imported into the Core repository, with #505 | Measurements of 2026-11-21 |
 | pkg | A pre-release build of the older CLI line, with Box Core moved to `217c860` by a local path override, plus `core-01` | Depends on two local uncommitted patches; built without `--locked` | Most newer-CLI measurements of 2026-11-21 |
-| box 0.1.11 | A release of the older CLI line | Same per-endpoint refusal as 0.1.8 | Two act b3 result files only |
+| box 0.1.11 | A release of the older CLI line | Same per-endpoint refusal as 0.1.8 | Two tool-allowlist result files only |
 | box 0.1.8 | The installed release of the older CLI line (`~/.box` home) | No `BOX_HOME`; refuses the real per-endpoint catalog | Measurements of 2026-11-14 |
 
 The workshop teaches only the newer CLI's form (profiles under `$BOX_HOME`, packs named `@box/<name>`, `[project] access`). Profiles written for 0.1.8 do not carry over.
@@ -34,16 +34,20 @@ The workshop teaches only the newer CLI's form (profiles under `$BOX_HOME`, pack
 
 "Paid" means a real headless run with a budget cap. "Free check" means the invalid-key run that connects the servers and stops at the first model call.
 
+<div class="aib-acts-1">
+
 | Act | box 0.1.8 | pkg | pkg-main | pkg-fix (this site) |
 |---|---|---|---|---|
-| a (no box) | no box involved; 3 runs | n/a | n/a | n/a: no box; one more paid verification run with Claude Code 2.1.330 (turns and cost only) |
-| b1 | works (3 runs) | works (logs) | free check | free check; paid (logs, one verification run: turns and cost only) |
-| b2 | works, refuses both tasks | works (logs) | free check | paid, both tasks |
-| b3 | does not work: the catalog is refused | works with `core-01` (61 to 64 s staging wait) | works (deployments-only task) | free check: connected, 3,053 tools; paid (steering sentence, two verification runs: turns and cost only) |
-| b3-args | not available | works (2 runs) | works | paid (one run): first call refused, second permitted; two more verification runs (turns and cost only) |
-| c | works | works | works (allowed) | paid, both tasks, plus the run before the API route |
+| token-scope (no box) | no box involved; 3 runs | n/a | n/a | n/a: no box; one more paid verification run with Claude Code 2.1.330 (turns and cost only) |
+| opaque-execute | works (3 runs) | works (logs) | free check | free check; paid (logs, one verification run: turns and cost only) |
+| deny-execute | works, refuses both tasks | works (logs) | free check | paid, both tasks |
+| tool-allowlist | does not work: the catalog is refused | works with `core-01` (61 to 64 s staging wait) | works (deployments-only task) | free check: connected, 3,053 tools; paid (steering sentence, two verification runs: turns and cost only) |
+| argument-rules | not available | works (2 runs) | works | paid (one run): first call refused, second permitted; two more verification runs (turns and cost only) |
+| request-rules | works | works | works (allowed) | paid, both tasks, plus the run before the API route |
 
-So the numbers on [Measurements](/results/measurements/) come from more than one build, and each says which. The verification runs on pkg-fix recorded only turns and cost, so the decisions and tokens shown for b1 and b3 come from pkg. That their decisions are the same on pkg-fix is an inference (the fix changes only schema generation), not a measurement.
+</div>
+
+So the numbers on [Measurements](/results/measurements/) come from more than one build, and each says which. The verification runs on pkg-fix recorded only turns and cost, so the decisions and tokens shown for the opaque-execute and tool-allowlist acts come from pkg. That their decisions are the same on pkg-fix is an inference (the fix changes only schema generation), not a measurement.
 
 ### Building pkg-fix yourself
 
@@ -69,11 +73,11 @@ Status as read on 2026-11-21 and 2026-11-22 in the public strands-agents reposit
 | # | Fact | Status | How the workshop handles it |
 |---|---|---|---|
 | 7 | Box refuses a run whose broker socket path is over 103 bytes. The path is the Box home plus 38 bytes (derived), so `BOX_HOME` may be at most 65 bytes. The CLI does not check this up front. | Documented limit. | `BOX_HOME="$HOME/box-ws"`, short for any normal user name. |
-| 8 | Tool names cost tokens: 3,053 names are sent on every request even with tool search (75,349 tokens measured on the list of 2026-11-14, 11 names fewer); a per-endpoint run cost 7.4 to 13.9 times act a or c. With tool search off the request is refused (about 2.2 million tokens against a 1,000,000 limit). | Inherent to per-endpoint mode and the client, not a Box defect. | Tool search on in Part 4; the local exec proxy in Part 5. |
-| 9 | A tool-name allow-list must name every tool a model might pick: in act b3 Claude chose `workers_list`, which the list did not name. | Design gap of the allow-list, not a Box bug. | The b3 steering sentence names the one tool to use. |
+| 8 | Tool names cost tokens: 3,053 names are sent on every request even with tool search (75,349 tokens measured on the list of 2026-11-14, 11 names fewer); a per-endpoint run cost 7.4 to 13.9 times the token-scope or request-rules act. With tool search off the request is refused (about 2.2 million tokens against a 1,000,000 limit). | Inherent to per-endpoint mode and the client, not a Box defect. | Tool search on in Part 4; the local exec proxy in Part 5. |
+| 9 | A tool-name allow-list must name every tool a model might pick: in the tool-allowlist act Claude chose `workers_list`, which the list did not name. | Design gap of the allow-list, not a Box bug. | The tool-allowlist steering sentence names the one tool to use. |
 | 10 | The per-endpoint catalog is 6,540,316 bytes, 78% of Box's 8 MiB cap per list. It grew by 11 tools, to 3,053, in a week. | Limit, not filed. | None needed today. |
 | 11 | Usage telemetry is on by default in the newer CLI. `box telemetry off` writes a file outside `BOX_HOME`. | By design, documented. | `BOX_TELEMETRY=0` in the shell. |
-| 12 | The vendor's `execute` hides the API call from Box (act b1). | By design: the reason for acts b2 and c. | Act c. |
+| 12 | The vendor's `execute` hides the API call from Box (the opaque-execute act). | By design: the reason for the deny-execute and request-rules acts. | The request-rules act. |
 | 13 | Argument typing edge cases (an argument of unknown type, objects without properties, date formats) are not shown for rules on arguments. | Not tested. | Rules on typed arguments only, such as `path.account_id`. |
 | 14 | Policy-writing traps: a rule naming actions of two namespaces must be split; a rule on an MCP tool's response loads but never matches (issue #396); a per-tool `permit` that does not match falls back to the server's permit. | Known behaviour (#396 open). | Part 4 writes `forbid` rules. |
 | 15 | Interactive mode was checked only up to its first screen; it has no dollar cap. | Not checked further. | Measured steps are headless with `--max-turns` and `--max-budget-usd`. |
@@ -102,14 +106,33 @@ What the workshop wanted from the box CLI and could not get, on the pkg-fix buil
 | 16 | Start-up lines that match what happened | A run that fails on a missing credential variable first prints a box ID, a records path, a reuse command and a history command. Nothing is saved: no run folder, no line in `box runs list`, and `box runs history <id>` fails with "No such file or directory" | Read the last line (`credential setup failed`), set the variable, run again | measured |
 | 17 | Help text that follows `BOX_HOME` | `--help` examples say `~/.strands/box` | `box help agent` prints the real home | source |
 | 18 | Turn telemetry off inside `BOX_HOME` | `box telemetry off` writes outside `BOX_HOME` | `BOX_TELEMETRY=0` | source |
-| 19 | A permit you write yourself for an MCP server | Declaring `[mcp.<name>]` always generates a permit for every method and tool; restrictions can only be forbids | Forbid rules (b2, b3) | measured |
+| 19 | A permit you write yourself for an MCP server | Declaring `[mcp.<name>]` always generates a permit for every method and tool; restrictions can only be forbids | Forbid rules (deny-execute, tool-allowlist) | measured |
 | 20 | A released CLI with the fix | None | Local build | source |
 | 21 | An early check of the broker socket path length | Core refuses at start | Keep `BOX_HOME` at most 65 bytes | source |
-| 22 | Remove the agent's transcripts from storage, and nothing else | Claude Code keeps a transcript of every run in storage, under `agent/config/projects/`, and storage outlives the run. `box profile reset` deletes the whole storage, settings and first-run answers included; there is no option for the transcripts alone | `ls -R` and `rm -r` on the `projects` folder ([act b1](/part-2/act-b1/#the-transcripts-in-storage)) | measured, source |
+| 22 | Remove the agent's transcripts from storage, and nothing else | Claude Code keeps a transcript of every run in storage, under `agent/config/projects/`, and storage outlives the run. `box profile reset` deletes the whole storage, settings and first-run answers included; there is no option for the transcripts alone | `ls -R` and `rm -r` on the `projects` folder ([the opaque-execute act](/part-2/opaque-execute/#the-transcripts-in-storage)) | measured, source |
+
+## What's next: code mode in the agent harness
+
+In the request-rules act the exec proxy, a small local MCP server, runs the agent's script inside the box, so each API request crosses Box's egress gateway. Agent harnesses are starting to run such scripts themselves. As read 2026-11-24 in their docs:
+
+- **Claude Code** has Code Mode, experimental and off by default, from v2.1.323, turned on with `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`. "Claude writes JavaScript that makes the tool calls, and Claude Code runs that code in your session." Claude Code's own sandbox setting, which is separate from Box, covers only the shell commands the code runs.
+- **OpenCode** has a tool: "`execute` runs JavaScript in Code Mode so the agent can call and combine tools from the catalog." MCP servers are reached through `execute` unless a server sets `codemode: false`. The runtime "provides `fetch` for HTTP requests; everything else goes through tools in its catalog."
+
+This is the idea of the request-rules act: the script and its requests run on the developer's side, so a box around the agent could see each request. For isolating the script, Claude Code's docs say: "run Claude Code in a container or virtual machine." In this workshop that is the box's job.
+
+If a harness does this inside a box, the exec proxy and its registration (`[mcp.exec-proxy]`, `exec-proxy.json`) could go, and the rules on each request would stay: less to ship, same story.
+
+What is not known:
+
+- Neither feature was run for this workshop, inside a box or outside.
+- Box ships no pack for OpenCode. As read 2026-11-24, release v0.3.0 has agent packs for Claude Code, Codex, Kiro and Pi (`claude`, `codex`, `kiro`, `pi`). Running OpenCode in a box would need a hand-written profile, which was not tried. An open draft pull request in the Box repository, #418, works on two things it says OpenCode needs on macOS.
+- Whether Code Mode starts when Claude Code's model traffic goes through Box's egress gateway (Box points the agent at it with `HTTPS_PROXY`). Its docs say "You can't use Code Mode through a gateway", nor through some cloud platforms.
+- Claude Code's page describes code that makes tool calls, not HTTP requests of its own. Code Mode also needs "an interactive `claude` session in a terminal"; this workshop's measured runs are headless.
+- Whether the scripts' requests pass through the box's gateway the way the exec proxy's do.
 
 ## Not checked
 
-- Decisions and token counts of acts b1 and b3 on pkg-fix (their paid runs there recorded turns and cost only). Paid runs of b1's allowed task and of b3's logs and allowed tasks on pkg-fix.
+- Decisions and token counts of the opaque-execute and tool-allowlist acts on pkg-fix (their paid runs there recorded turns and cost only). Paid runs of the opaque-execute act's allowed task and of the tool-allowlist act's logs and allowed tasks on pkg-fix.
 - Token counts for the 3,053-tool catalog (only the list of 2026-11-14, 11 tools fewer, was counted).
 - Any status of the upstream pull requests, issues and releases after 2026-11-21.
 - The build-from-source steps above, as typed.
@@ -123,8 +146,10 @@ What the workshop wanted from the box CLI and could not get, on the pkg-fix buil
 - The CLI gaps are mostly about seeing: live decisions, readable records, and checking a rule before a run.
 
 <ReadMore href="https://github.com/strands-agents/box" source="Box docs">The Box repository</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/getting-started.md" source="Box docs">Get started with the CLI, and the planned release</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/troubleshooting.md" source="Box docs">Troubleshooting, including the socket path limit</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/quickstart/" source="Box docs">Get started with the CLI, and the planned release</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/troubleshooting/" source="Box docs">Troubleshooting, including the socket path limit</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/mcp-discovery.md" source="Box docs">How Box discovers and stages MCP tools</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp-policy.md" source="Box docs">Write policy for an MCP server</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/write-mcp-policy/" source="Box docs">Write policy for an MCP server</ReadMore>
 <ReadMore href="/results/measurements/" source="This workshop">Measurements, with the build of each number</ReadMore>
+<ReadMore href="https://code.claude.com/docs/en/code-mode" source="Claude Code docs">Run tool calls from code with Code Mode (experimental)</ReadMore>
+<ReadMore href="https://opencode.ai/docs/tools/" source="OpenCode docs">OpenCode's tools, among them `execute` and Code Mode</ReadMore>

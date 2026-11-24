@@ -14,17 +14,17 @@ import { PartProgress, Pieces, Command, Flag, Why, ReadMore, Seat, Expect } from
 
 <PartProgress current="part-4/policy-on-arguments" />
 
-After this page you can write a rule that reads what a tool is called with, not only which tool it is: how Box gives a tool's arguments types, how to find their names, why an optional argument needs `has`, and why such a rule is written as `forbid ... unless`. The story needs it because the allow-list of act b3 lets `workers_deployments_list` run on any Cloudflare account the token can reach, and the security engineer wants it used on the workshop's account only.
+After this page you can write a rule that reads what a tool is called with, not only which tool it is: how Box gives a tool's arguments types, how to find their names, why an optional argument needs `has`, and why such a rule is written as `forbid ... unless`. The story needs it because the allow-list of the tool-allowlist act lets `workers_deployments_list` run on any Cloudflare account the token can reach, and the security engineer wants it used on the workshop's account only.
 
 <Pieces stage={4} />
 
-The picture is the one from act b3. This page is about the arrow from the tool catalog to the policy engine: the typed schema that lets a rule read each tool's arguments.
+The picture is the one from the tool-allowlist act. This page is about the arrow from the tool catalog to the policy engine: the typed schema that lets a rule read each tool's arguments.
 
 ## Two decisions for one tool call
 
 A tool call through an identified MCP server is decided twice (Box's action reference):
 
-1. as an **`mcp:call`**, with the fields `server`, `method` and `tool`. Act b3's `operate_tools_only` decides here. So does the generated `mcp_cloudflare_call`.
+1. as an **`mcp:call`**, with the fields `server`, `method` and `tool`. The tool-allowlist act's `operate_tools_only` decides here. So does the generated `mcp_cloudflare_call`.
 2. if that is permitted, as the tool's own **per-tool action**, `cloudflare::Action::"workers_deployments_list"`. Here `context.input` holds the tool's arguments.
 
 The account a call is for is an argument, so a rule about the account is a rule on the per-tool action.
@@ -45,7 +45,7 @@ Every tool in the server's `tools/list` reply describes its input as a JSON Sche
 | `anyOf`, `oneOf` or a list of types | a record with optional `typeChoice0`, `typeChoice1` ... |
 | a name that is not a plain identifier (`zone-id`) | `context.input["zone-id"]`, tested with `has "zone-id"` |
 
-In per-endpoint mode, Cloudflare's tools put the operation's path parameters in an argument called `path` and its query parameters in `query`. For `workers_deployments_list` (the API operation "List Deployments", `GET /accounts/{account_id}/workers/scripts/{script_name}/deployments`) this is the call the model made in act b3, copied from the run's event stream:
+In per-endpoint mode, Cloudflare's tools put the operation's path parameters in an argument called `path` and its query parameters in `query`. For `workers_deployments_list` (the API operation "List Deployments", `GET /accounts/{account_id}/workers/scripts/{script_name}/deployments`) this is the call the model made in the tool-allowlist act, copied from the run's event stream:
 
 ```json title="The arguments of a measured workers_deployments_list call"
 {"path":{"account_id":"0123456789abcdef0123456789abcdef","script_name":"box-poc-workshop"}}
@@ -79,7 +79,7 @@ box: error: unrecognized subcommand 'policy'
 
 - **The tool's name**: the first line of `check.jsonl` from any free check lists every tool Claude Code received, as `mcp__cloudflare__<name>`. Open it with `less check.jsonl` and search with `/workers_deployments`.
 - **The arguments**: the Cloudflare API reference for the operation names its path and query parameters. In per-endpoint mode they sit under `path` and `query`.
-- **The arguments a model really sends**: a headless run's event stream (`act-b3-steer.jsonl`) holds each tool call with its input, as above. Search it with `less` for `workers_deployments_list`.
+- **The arguments a model really sends**: a headless run's event stream (`tool-allowlist-steer.jsonl`) holds each tool call with its input, as above. Search it with `less` for `workers_deployments_list`.
 - **The policy engine's own check**: a per-tool rule that names an argument the tool does not have does not load, and the run prints the per-tool warning. That tells you a name is wrong, not which one.
 
 ## `has`: testing an optional argument first
@@ -113,7 +113,7 @@ Read it: "refuse this tool, unless the call carries the workshop's account". Thr
 The arguments are only in `context.input` of the per-tool action. An `mcp:call` sees the server, the method and the tool's name, never what it is called with.
 
 <Fragment slot="alternative">
-Leave arguments alone and steer the model instead, as act b3 did with its sentence. That works for one person at one prompt. A rule holds for every prompt, including the ones nobody thought of.
+Leave arguments alone and steer the model instead, as the tool-allowlist act did with its sentence. That works for one person at one prompt. A rule holds for every prompt, including the ones nobody thought of.
 </Fragment>
 </Why>
 
@@ -141,8 +141,8 @@ For the agent nothing changes until it asks for the wrong account. Then it gets 
 - The box CLI cannot print the generated schema. Use the free check's tool list, the API reference and the run's event stream.
 - Write an argument rule as `forbid ... unless`: a permit adds nothing, and the forbid fails closed.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp-policy.md" source="Box docs">Write policy for an MCP server: per-tool actions, argument types, fail-closed rules</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy/actions.md" source="Box docs">Action reference: generated MCP tool actions</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/write-mcp-policy/" source="Box docs">Write policy for an MCP server: per-tool actions, argument types, fail-closed rules</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/policy-actions/" source="Box docs">Action reference: generated MCP tool actions</ReadMore>
 <ReadMore href="https://docs.cedarpolicy.com/policies/syntax-operators.html" source="Cedar docs">Operators: has, &&, ==</ReadMore>
 <ReadMore href="https://docs.cedarpolicy.com/policies/syntax-datatypes.html" source="Cedar docs">Data types: records, strings, Long</ReadMore>
 <ReadMore href="https://json-schema.org/understanding-json-schema/reference/object" source="JSON Schema">Objects, properties and required</ReadMore>

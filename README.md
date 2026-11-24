@@ -22,7 +22,7 @@ npm run build
 
 - `src/content/docs/`: the pages, one MDX file each, in the folders `start`, `part-1` to `part-5` and `results`.
 - `src/components/`: the workshop's own components (commands, flags, expected output, diagrams).
-- `src/integrations/base-links.mjs`: adds the site's base path to internal links, so pages can write `/part-2/act-b1/`.
+- `src/integrations/base-links.mjs`: adds the site's base path to internal links, so pages can write `/part-2/opaque-execute/`.
 - `src/styles/custom.css`: the site's styles on top of the Flexoki theme.
 - `public/`: files served as they are, such as the favicon.
 - `astro.config.mjs`: the site settings and the sidebar, which is the reading order.

@@ -21,51 +21,51 @@ Every link below returned a page when it was checked on 2026-11-22. Box's pages 
 ## Box: where to start
 
 <ReadMore href="https://github.com/strands-agents/box" source="Box docs">The repository and its README: what Box is, and the two products in it, Box Core and the box CLI.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/how-box-works.md" source="Box docs">How Box works: profiles, packs, runs and records from the box CLI's side, in one page.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/getting-started.md" source="Box docs">Get started: the CLI's own walk-through with Claude Code, using the shipped starter.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/how-box-works/" source="Box docs">How Box works: profiles, packs, runs and records from the box CLI's side, in one page.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/quickstart/" source="Box docs">Get started: the CLI's own walk-through with Claude Code, using the shipped starter.</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/README.md" source="Box docs">The box CLI user guide: the index of every CLI page.</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/README.md" source="Box docs">The Box Core user guide: the index of the engine's pages, for `box.toml` and policy in depth.</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/terminology.md" source="Box docs">Terminology: what Box means by box, sandbox, workload, pack and the other words this site uses.</ReadMore>
 
 ## The box CLI, profiles and packs
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/cli.md" source="Box docs">The command reference: every `box` command and flag, and the environment variables such as `BOX_HOME` and `BOX_TELEMETRY`.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles.md" source="Box docs">Profiles: what a profile decides, and how to write and change one.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">The profile reference: every key of `profile.toml`, including `[project]`, `[storage]`, `[egress.*]` and `[mcp.*]`.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/packs.md" source="Box docs">Packs: reusable settings for one program, such as `@box/base`, and how a profile combines them.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/packs-reference.md" source="Box docs">The pack reference: every key of `pack.toml`.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/starters.md" source="Box docs">Starters: the questions `box profile create` asks, and the policy starters it copies.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/cli/" source="Box docs">The command reference: every `box` command and flag, and the environment variables such as `BOX_HOME` and `BOX_TELEMETRY`.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/profiles/" source="Box docs">Profiles: what a profile decides, and how to write and change one.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/profiles/" source="Box docs">The profile reference: every key of `profile.toml`, including `[project]`, `[storage]`, `[egress.*]` and `[mcp.*]`.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/packs/" source="Box docs">Packs: reusable settings for one program, such as `@box/base`, and how a profile combines them.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/packs/" source="Box docs">The pack reference: every key of `pack.toml`.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/starters/" source="Box docs">Starters: the questions `box profile create` asks, and the policy starters it copies.</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/resources/packs/claude/README.md" source="Box docs">The Claude Code pack: what it sets up, and what it copies from `~/.claude` (the reason this workshop writes the profile by hand).</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/resources/editing-box-profile.md" source="Box docs">The agent guide that `box help agent` prints: how to edit a profile, written for a coding agent.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/files.md" source="Box docs">Where Box keeps its files: the Box home, storage, run folders and records.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/config.md" source="Box docs">`config.toml`: settings that apply to every profile.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/troubleshooting.md" source="Box docs">Troubleshooting: common failures, including the broker socket path limit.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/limitations.md" source="Box docs">Limitations: what a box does not protect.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/file-rules.md" source="Box docs">Where file rules apply, and where the sandbox decides instead of the policy.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/files/" source="Box docs">Where Box keeps its files: the Box home, storage, run folders and records.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/box-config/" source="Box docs">`config.toml`: settings that apply to every profile.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/troubleshooting/" source="Box docs">Troubleshooting: common failures, including the broker socket path limit.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/limitations/" source="Box docs">Limitations: what a box does not protect.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/file-rules/" source="Box docs">Where file rules apply, and where the sandbox decides instead of the policy.</ReadMore>
 
 ## The sandbox, the gateway, secrets and records
 
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/architecture.md" source="Box docs">The architecture: the agent's sandbox, the trusted process and its four enforcement points.</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/macos-enforcement.md" source="Box docs">How Box enforces restrictions on macOS with Seatbelt and the trampoline.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/macos-requirements.md" source="Box docs">macOS requirements: Apple silicon, and how to check an installed package.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/security.md" source="Box docs">Security: what each tier governs, what Box always enforces, and what the operator must write.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/egress.md" source="Box docs">Egress configuration: routes, destinations and the credentials bound to them.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/macos-requirements/" source="Box docs">macOS requirements: Apple silicon, and how to check an installed package.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/security/" source="Box docs">Security: what each tier governs, what Box always enforces, and what the operator must write.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/network-and-credentials/" source="Box docs">Egress configuration: routes, destinations and the credentials bound to them.</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/egress.md" source="Box docs">The egress gateway's design: how it intercepts and decides each connection and request.</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/credentials.md" source="Box docs">How Box keeps credentials out of the box: stand-ins and how the gateway swaps them.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/telemetry.md" source="Box docs">Telemetry and records: what `records.jsonl` holds and how to send it elsewhere.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/record-telemetry/" source="Box docs">Telemetry and records: what `records.jsonl` holds and how to send it elsewhere.</ReadMore>
 
 ## MCP in Box
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp.md" source="Box docs">MCP server configuration: stdio and remote servers, aliases, and the protocol versions Box accepts.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp-policy.md" source="Box docs">Write policy for an MCP server: `mcp:call` and the per-tool actions with typed arguments.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/add-an-mcp-server/" source="Box docs">MCP server configuration: stdio and remote servers, aliases, and the protocol versions Box accepts.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/write-mcp-policy/" source="Box docs">Write policy for an MCP server: `mcp:call` and the per-tool actions with typed arguments.</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/mcp.md" source="Box docs">How Box runs MCP servers: the broker and its sandboxes.</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/mcp-discovery.md" source="Box docs">How Box discovers a server's tools and stages its catalog.</ReadMore>
 
 ## Policies: Box, Cedar and Dogwood
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy.md" source="Box docs">The Box policy guide: how rules are written, combined and recorded.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy/actions.md" source="Box docs">The action reference: every action Box asks the policy about, and its context.</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/tutorials/first-policy.md" source="Box docs">A first policy, as a tutorial.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/policy/" source="Box docs">The Box policy guide: how rules are written, combined and recorded.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/policy-actions/" source="Box docs">The action reference: every action Box asks the policy about, and its context.</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/write-a-policy/" source="Box docs">A first policy, as a tutorial.</ReadMore>
 <ReadMore href="https://github.com/strands-agents/box/blob/main/docs/design/policy.md" source="Box docs">The policy design: why Box decides the way it does.</ReadMore>
 <ReadMore href="https://docs.cedarpolicy.com/" source="Cedar docs">The Cedar reference guide.</ReadMore>
 <ReadMore href="https://docs.cedarpolicy.com/policies/syntax-policy.html" source="Cedar docs">Basic policy syntax: principal, action, resource, `when` and `unless`.</ReadMore>
@@ -104,6 +104,13 @@ Every link below returned a page when it was checked on 2026-11-22. Box's pages 
 <ReadMore href="https://code.claude.com/docs/en/mcp" source="Claude Code docs">MCP in Claude Code: config files, server types, and the `${VAR}` placeholders.</ReadMore>
 <ReadMore href="https://code.claude.com/docs/en/settings" source="Claude Code docs">Settings and environment variables, such as `CLAUDE_CONFIG_DIR`.</ReadMore>
 
+## Code mode in the agent harness
+
+Read on 2026-11-24. Neither feature was run for this workshop; [builds and gaps](/results/builds-and-gaps/) says what is not known.
+
+<ReadMore href="https://code.claude.com/docs/en/code-mode" source="Claude Code docs">Code Mode, experimental: Claude writes JavaScript that makes the tool calls, and Claude Code runs it in your session.</ReadMore>
+<ReadMore href="https://opencode.ai/docs/tools/" source="OpenCode docs">OpenCode's tools: `execute` runs JavaScript in Code Mode, with `fetch` for HTTP requests.</ReadMore>
+
 ## Strands Agents
 
 <ReadMore href="https://strandsagents.com/" source="Strands Agents">The Strands Agents site, the project Box belongs to.</ReadMore>
@@ -119,5 +126,6 @@ Every link below returned a page when it was checked on 2026-11-22. Box's pages 
 - Box's own pages are on GitHub and describe the current `main` branch, which can be newer than this workshop's build.
 - For the policy language, start with Box's policy guide, then Cedar's syntax and authorization pages.
 - For code mode, Cloudflare's two blog posts explain the design; Box's MCP pages explain what Box can see of it.
+- Claude Code and OpenCode now offer a code mode of their own, on the developer's side; neither was run here.
 
 Back to the start: [the welcome page](/).

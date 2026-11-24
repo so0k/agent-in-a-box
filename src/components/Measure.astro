@@ -5,7 +5,7 @@
  * Leave a prop out when it was not measured; it shows as "not measured".
  *
  * Usage (MDX):
- *   <Measure act="c" task="allowed" turns={2} tokens="6,055 in / 746 out" cost="$0.0172" wall="10 s" build="pkg" />
+ *   <Measure act="request-rules" task="allowed" turns={2} tokens="6,055 in / 746 out" cost="$0.0172" wall="10 s" build="pkg" />
  */
 interface Props {
 	act?: string;
@@ -26,7 +26,7 @@ const items: [string, string][] = [
 	['Wall time', fmt(wall)],
 	['Box build', fmt(build)],
 ];
-const caption = ['Measured', act ? `act ${act}` : null, task ? `task: ${task}` : null].filter(Boolean).join(', ');
+const caption = ['Measured', act ? `the ${act} act` : null, task ? `task: ${task}` : null].filter(Boolean).join(', ');
 ---
 
 <figure class="aib-measure not-content">

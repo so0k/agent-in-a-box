@@ -1,24 +1,24 @@
 ---
-title: "Act b3: an allow-list of tool names"
+title: "tool-allowlist: an allow-list of tool names"
 description: "Allow the read operations by tool name and leave everything else refused."
 sidebar:
-  label: "Act b3: allow-list"
+  label: "tool-allowlist"
   order: 2
   badge:
-    text: "Act b3"
+    text: "Act"
     class: "aib-badge aib-badge-act"
 ---
 
-import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, FileTree, Tabs, TabItem } from '@astrojs/starlight/components';
 import { PartProgress, Pieces, CatchUp, Iteration, Command, Flag, Why, ReadMore, Prompt, Expect, Seat, Measure } from '~/components';
 
-<PartProgress current="part-4/act-b3" />
+<PartProgress current="part-4/tool-allowlist" />
 
 In this act you point the agent at Cloudflare's per-endpoint server and write the security engineer's constraint as an allow-list: six tool names that read the Workers and their deployments, and every other tool of 3,053 refused. You will see the logs tool refused by name, and you will see why the plain "allowed" task is only half done.
 
 ## Where we are in the story
 
-Act b2 kept the logs and the attendee data of the workshop progress tracker safe by refusing `execute`, and in doing so refused the work the team wanted done too. The developer still wants the agent to list the Workers and check the deployment of `box-poc-workshop`. The security engineer agrees, as long as the agent cannot read the logs or the attendee registry, and cannot deploy or delete. With one tool per operation ([The per-endpoint catalog](/part-4/per-endpoint-catalog/)), those are separate names.
+The deny-execute act kept the logs and the attendee data of the workshop progress tracker safe by refusing `execute`, and in doing so refused the work the team wanted done too. The developer still wants the agent to list the Workers and check the deployment of `box-poc-workshop`. The security engineer agrees, as long as the agent cannot read the logs or the attendee registry, and cannot deploy or delete. With one tool per operation ([The per-endpoint catalog](/part-4/per-endpoint-catalog/)), those are separate names.
 
 <CatchUp>
 
@@ -76,7 +76,7 @@ forbid (principal, action == cloudflare::Action::"execute", resource);
 
 </CatchUp>
 
-<Pieces stage={4} highlight="b3" />
+<Pieces stage={4} highlight="tool-allowlist" />
 
 New on the path: the egress gateway stages the server's 3,053 tools as a catalog, and the policy engine decides each tool call by its name. A listed tool reaches the Cloudflare API; the logs tool does not.
 
@@ -104,7 +104,7 @@ The profile does not change for this. `destinations` names a host, and Box match
 A second file, not an edit of the first, so each act names the server it uses on its command line and you can go back to code mode by changing one flag.
 
 <Fragment slot="alternative">
-Editing `cloudflare-code-mode.json` works too, but then the file's name says the wrong thing and acts a to b2 no longer run as written.
+Editing `cloudflare-code-mode.json` works too, but then the file's name says the wrong thing and the token-scope, opaque-execute and deny-execute acts no longer run as written.
 </Fragment>
 </Why>
 
@@ -126,7 +126,7 @@ ANTHROPIC_API_KEY=sk-ant-preflight-invalid-key box run ws --no-banner -- --setti
 <Flag name="--mcp-config cloudflare-per-endpoint.json">The per-endpoint server from iteration 1.</Flag>
 <Flag name="--tools ToolSearch">The only built-in tool is `ToolSearch`, so Claude Code sends the tool names and loads a definition only when the model asks for it. Without tool search the first request would be about 2.2 million tokens, over the model's limit of 1,000,000.</Flag>
 <Flag name="--allowedTools mcp__cloudflare,ToolSearch">Pre-approves the server's tools and `ToolSearch`, so the headless run never stops to ask.</Flag>
-<Flag name="(the rest)">The invalid-key prefix, `run ws --no-banner --`, `--strict-mcp-config`, `--model claude-sonnet-5-5`, `--max-turns 1`, `-p "Say hello."`, `--output-format stream-json --verbose`, `< /dev/null` and `> check.jsonl` are as in the free check of [act b2](/part-3/act-b2/).</Flag>
+<Flag name="(the rest)">The invalid-key prefix, `run ws --no-banner --`, `--strict-mcp-config`, `--model claude-sonnet-5-5`, `--max-turns 1`, `-p "Say hello."`, `--output-format stream-json --verbose`, `< /dev/null` and `> check.jsonl` are as in the free check of [the deny-execute act](/part-3/deny-execute/).</Flag>
 
 </Command>
 
@@ -216,6 +216,24 @@ packs = ["@box/base"]
 policies = ["operate-tools.dw"]
 ```
 
+The new policy file goes next to `profile.toml`, and the workspace now holds both MCP config files:
+
+<FileTree>
+
+- box-ws/
+  - profiles/
+    - ws/
+      - profile.toml you edit this
+      - no-remote-execute.dw no longer listed
+      - **operate-tools.dw** the allow-list
+  - storage/ kept between runs
+  - r/ one folder per run
+- leaderboard-ops/ the workspace
+  - cloudflare-code-mode.json
+  - **cloudflare-per-endpoint.json** the per-endpoint server, from iteration 1
+
+</FileTree>
+
 The old file can stay on disk; it is no longer listed. Then create `$HOME/box-ws/profiles/ws/operate-tools.dw`. Build it in this order:
 
 1. **The comment** states the constraint in the story's words and names the tools it keeps out: `o11y_telemetry_query` (the Worker's logs), `d1_query` (the attendee registry), and every deploy or delete tool.
@@ -294,11 +312,11 @@ The minute of staging happens behind Claude Code's prompt. Whether a task typed 
 <Command what="Runs one task in the box and writes Claude Code's event stream to a file.">
 
 ```sh
-box run ws --no-banner -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-per-endpoint.json --tools ToolSearch --allowedTools mcp__cloudflare,ToolSearch --model claude-sonnet-5-5 --max-turns 12 --max-budget-usd 0.25 -p "Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > act-b3-logs.jsonl
+box run ws --no-banner -- --setting-sources "" --strict-mcp-config --mcp-config cloudflare-per-endpoint.json --tools ToolSearch --allowedTools mcp__cloudflare,ToolSearch --model claude-sonnet-5-5 --max-turns 12 --max-budget-usd 0.25 -p "Show me the last hour of logs for the Cloudflare Worker box-poc-workshop on account 0123456789abcdef0123456789abcdef." --output-format stream-json --verbose < /dev/null > tool-allowlist-logs.jsonl
 ```
 
-<Flag name="--max-budget-usd 0.25">The money cap. Each measured b3 run cost between $0.22 and $0.24, close to it, because of the tool names.</Flag>
-<Flag name={'-p "..."'}>The task. Run it three times, once per sentence below, and write to `act-b3-logs.jsonl`, `act-b3-allowed.jsonl` and `act-b3-steer.jsonl`.</Flag>
+<Flag name="--max-budget-usd 0.25">The money cap. Each measured run of this act cost between $0.22 and $0.24, close to it, because of the tool names.</Flag>
+<Flag name={'-p "..."'}>The task. Run it three times, once per sentence below, and write to `tool-allowlist-logs.jsonl`, `tool-allowlist-allowed.jsonl` and `tool-allowlist-steer.jsonl`.</Flag>
 <Flag name="(the rest)">As in the free check, with `--max-turns 12`.</Flag>
 
 </Command>
@@ -379,14 +397,14 @@ Add `"workers_list"` and `"workers_get"` to the list and run the allowed task ag
 The policy now sees which operation the agent asks for, and refuses the logs by name before the request reaches Cloudflare. A new tool in the catalog is refused until someone lists it. But the allow-list is only as good as its names: the model reached for `workers_list`, which the security engineer did not think of. And an allowed tool's answer is not checked: the deployments list returned the deployer's email address in its metadata.
 </Seat>
 <Seat who="developer">
-The deployment question is answered and the logs are refused, but the Worker list is not, unless the developer steers the model to a listed tool or asks the security engineer to widen the list. Every run waits about a minute for the catalog and costs about $0.22 to $0.24, against $0.01 to $0.07 for act b2's runs in code mode.
+The deployment question is answered and the logs are refused, but the Worker list is not, unless the developer steers the model to a listed tool or asks the security engineer to widen the list. Every run waits about a minute for the catalog and costs about $0.22 to $0.24, against $0.01 to $0.07 for the deny-execute act's runs in code mode.
 </Seat>
 
 **The takeaway:** with one tool per operation the policy can allow reads and refuse the logs by name, but a list of names refuses whatever tool the model picks that nobody listed.
 
-<Measure act="b3" task="logs (last hour)" turns={3} tokens="248,292 in, 1,426 out" cost="$0.2357" wall="82 s" build="pkg" />
-<Measure act="b3" task="allowed" turns={4} tokens="241,478 in, 1,076 out" cost="$0.2278" wall="80 s" build="pkg" />
-<Measure act="b3" task="steering sentence" turns={3} tokens="239,979 in, 787 out" cost="$0.2188" wall="78 s" build="pkg" />
+<Measure act="tool-allowlist" task="logs (last hour)" turns={3} tokens="248,292 in, 1,426 out" cost="$0.2357" wall="82 s" build="pkg" />
+<Measure act="tool-allowlist" task="allowed" turns={4} tokens="241,478 in, 1,076 out" cost="$0.2278" wall="80 s" build="pkg" />
+<Measure act="tool-allowlist" task="steering sentence" turns={3} tokens="239,979 in, 787 out" cost="$0.2188" wall="78 s" build="pkg" />
 
 One run each, headless, on the earlier local build `pkg` with the kit's six-tool rule; On the workshop's build (`pkg-fix`), only the steering sentence was run as a paid run, twice, with your file as this page builds it: 3 turns and USD 0.2218 and 0.2217 as Claude Code reported them; tokens and wall time were not recorded. The logs and allowed tasks were not run as paid runs on `pkg-fix`. About 60 seconds of each wall time is the staging wait. See [Builds and gaps](/results/builds-and-gaps/) for the builds.
 
@@ -395,7 +413,7 @@ One run each, headless, on the earlier local build `pkg` with the kit's six-tool
 <Command what="Deletes this act's stream files and the free check's stream. A stream holds whatever the agent read; in the measured steering run that included the deployer's email address.">
 
 ```sh
-rm -f act-b3-logs.jsonl act-b3-allowed.jsonl act-b3-steer.jsonl check.jsonl
+rm -f tool-allowlist-logs.jsonl tool-allowlist-allowed.jsonl tool-allowlist-steer.jsonl check.jsonl
 ```
 
 <Flag name="-f">No question, and no error if a file is missing.</Flag>
@@ -403,7 +421,7 @@ rm -f act-b3-logs.jsonl act-b3-allowed.jsonl act-b3-steer.jsonl check.jsonl
 
 </Command>
 
-Claude Code also kept a transcript of each of these runs in Box storage, with the same content as the stream files. Storage is kept between runs, so deleting the streams leaves them there. [Act b1](/part-2/act-b1/#the-transcripts-in-storage) explains the folder, and why `box profile reset` would remove more than the transcripts.
+Claude Code also kept a transcript of each of these runs in Box storage, with the same content as the stream files. Storage is kept between runs, so deleting the streams leaves them there. [The opaque-execute act](/part-2/opaque-execute/#the-transcripts-in-storage) explains the folder, and why `box profile reset` would remove more than the transcripts.
 
 <Command what="Lists the transcripts kept in the profile's storage. It changes nothing.">
 
@@ -434,8 +452,8 @@ rm -r "$BOX_HOME/storage/ws/default/agent/config/projects"
 
 The security engineer also wants to say which account a listed tool may be used on. [Rules on a tool's arguments](/part-4/policy-on-arguments/) shows how.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/mcp-policy.md" source="Box docs">Write policy for an MCP server: allow-lists, mcp:call fields</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy/actions.md" source="Box docs">Action reference: mcp:call</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/write-mcp-policy/" source="Box docs">Write policy for an MCP server: allow-lists, mcp:call fields</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/policy-actions/" source="Box docs">Action reference: mcp:call</ReadMore>
 <ReadMore href="https://code.claude.com/docs/en/env-vars" source="Claude Code docs">MCP_TIMEOUT and other environment variables</ReadMore>
 <ReadMore href="https://code.claude.com/docs/en/cli-reference" source="Claude Code docs">CLI reference: `--setting-sources`, `--tools`, `--allowedTools`</ReadMore>
 <ReadMore href="https://docs.cedarpolicy.com/policies/syntax-operators.html" source="Cedar docs">Operators: has, contains</ReadMore>

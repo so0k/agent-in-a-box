@@ -83,7 +83,7 @@ In Parts 3 and 4 the security engineer's rules decided a tool call. Here they de
 | Fields the rule reads | `server`, `method`, `tool`, and the tool's typed arguments | `host`, `port`, `method`, `path`, `body_bytes`, `intercepted` |
 | What it knows about the effect | what the tool's name and arguments promise | the exact request that would reach Cloudflare |
 
-The difference matters for the story. In act b2 a rule on `execute` could only refuse the whole tool, because the script was out of sight. In act b3 a rule on a tool name relied on the model picking the tool on the list. A rule on the request does not care which tool or which script sent it.
+The difference matters for the story. In the deny-execute act, a rule on `execute` could only refuse the whole tool, because the script was out of sight. In the tool-allowlist act, a rule on a tool name relied on the model picking the tool on the list. A rule on the request does not care which tool or which script sent it.
 
 ## How a rule names a request
 
@@ -111,7 +111,7 @@ Each run on this page is a real run, with the allowed task only, so you see the 
 <Command what="Runs the allowed task headless in the box, with the exec proxy as the only MCP server, and writes the stream to a file.">
 
 ```sh
-box run ws --no-banner -- --bare --strict-mcp-config --mcp-config exec-proxy.json --tools "" --allowedTools mcp__exec-proxy --model claude-sonnet-5-5 --max-turns 10 --max-budget-usd 0.25 -p "List the Workers on Cloudflare account 0123456789abcdef0123456789abcdef and summarise the current deployment of the Worker box-poc-workshop." --output-format stream-json --verbose < /dev/null > act-c-noroute.jsonl
+box run ws --no-banner -- --bare --strict-mcp-config --mcp-config exec-proxy.json --tools "" --allowedTools mcp__exec-proxy --model claude-sonnet-5-5 --max-turns 10 --max-budget-usd 0.25 -p "List the Workers on Cloudflare account 0123456789abcdef0123456789abcdef and summarise the current deployment of the Worker box-poc-workshop." --output-format stream-json --verbose < /dev/null > request-rules-noroute.jsonl
 ```
 
 <Flag name="box run ws --no-banner --">The profile `ws`, no activity line, and the end of Box's options.</Flag>
@@ -122,7 +122,7 @@ box run ws --no-banner -- --bare --strict-mcp-config --mcp-config exec-proxy.jso
 <Flag name="--max-budget-usd 0.25">Claude Code stops when the run has cost USD 0.25. It works only with `-p`.</Flag>
 <Flag name='-p "List the Workers ..."'>The developer's allowed task, word for word as in every act.</Flag>
 <Flag name="--output-format stream-json --verbose">One JSON event per line, so turns, tokens and the tool results can be read afterwards.</Flag>
-<Flag name="< /dev/null > act-c-noroute.jsonl">An empty input, and the stream in a file you can open with `less`.</Flag>
+<Flag name="< /dev/null > request-rules-noroute.jsonl">An empty input, and the stream in a file you can open with `less`.</Flag>
 
 </Command>
 
@@ -445,7 +445,7 @@ Leave it out. The logs stay refused, and the agent reads only the general reason
 
 ## How a refusal looks in the records
 
-You will see the refusal of the logs query in act c. Here is what to look for, and where.
+You will see the refusal of the logs query in the request-rules act. Here is what to look for, and where.
 
 - **In the run's history.** A refused request is one row: `deny`, the action `http:request`, the resource `host:port/path`, the rule's id and the reason `a forbid rule matched`. Two filters of `box runs history` help: `--deny` prints only refusals, and `--action http:request` prints only API requests.
 - **In what the agent receives.** The gateway answers `403`, and the request never leaves the box. The body is the refusal text, in the form `http:request gate: policy denied this operation on '<host:port/path>' [policy: <id>]: <description>` (Box docs, `policy.md`). The proxy turns it into the error the script throws, starting `Refused by Box egress policy (rule: <id>)`.
@@ -467,7 +467,7 @@ box runs history b-0123456789abcdef --deny --action http:request
 
 <Seat who="security">
 
-You now write the constraint where the effect happens: on the request to Cloudflare. The rule does not depend on which tool the model picks, which script it writes or which operation name it finds; only on method, host and path. You can read the rule aloud: refuse everything on `api.cloudflare.com` except two `GET`s. What it cannot see is the request body and the response. An allowed read can still return personal data, as act c will show.
+You now write the constraint where the effect happens: on the request to Cloudflare. The rule does not depend on which tool the model picks, which script it writes or which operation name it finds; only on method, host and path. You can read the rule aloud: refuse everything on `api.cloudflare.com` except two `GET`s. What it cannot see is the request body and the response. An allowed read can still return personal data, as the request-rules act will show.
 
 </Seat>
 <Seat who="developer">
@@ -484,10 +484,10 @@ The agent's tools do not change: still `search` and `execute`. Nothing is added 
 - Policy sees the full path, `/client/v4/...`, without the query, and never the body.
 - A second rule that changes no decision can still carry the reason the story wants recorded.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy/actions.md" source="Box docs">The actions and their fields, including `net:connect` and `http:request`</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/policy.md" source="Box docs">Policy: how a denial reads, and "Forbid one URL path on a host"</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/profiles-reference.md" source="Box docs">Profile reference: routes and other hosts</ReadMore>
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/egress.md" source="Box docs">Egress credential configuration</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/policy-actions/" source="Box docs">The actions and their fields, including `net:connect` and `http:request`</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/policy/" source="Box docs">Policy: how a denial reads, and "Forbid one URL path on a host"</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/profiles/" source="Box docs">Profile reference: routes and other hosts</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/guides/network-and-credentials/" source="Box docs">Egress credential configuration</ReadMore>
 <ReadMore href="https://docs.cedarpolicy.com/" source="Cedar docs">The Cedar policy language</ReadMore>
 <ReadMore href="https://developers.cloudflare.com/workers/observability/logs/workers-logs/" source="Cloudflare docs">Workers Logs, what the refused routes hold</ReadMore>
 <ReadMore href="/part-3/policy-basics/" source="This workshop">Policy basics: how forbid and permit combine</ReadMore>

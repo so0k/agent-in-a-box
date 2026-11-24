@@ -1,4 +1,4 @@
-// Page sources write internal links from the site root ("/part-2/act-b1/").
+// Page sources write internal links from the site root ("/part-2/opaque-execute/").
 // This integration adds the configured base to those links when Markdown and
 // MDX are compiled, before starlight-links-validator checks them.
 

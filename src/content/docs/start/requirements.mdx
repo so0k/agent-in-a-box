@@ -63,7 +63,7 @@ sw_vers -productVersion
 
 The box build used here was compiled for macOS 15.0 and later (`MACOSX_DEPLOYMENT_TARGET=15.0` in its build record). It was run on macOS 26.7.1 only; earlier versions were not checked.
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/user/macos-requirements.md" source="Box docs">macOS requirements</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/reference/macos-requirements/" source="Box docs">macOS requirements</ReadMore>
 
 ## The box CLI: a local build
 
@@ -211,7 +211,7 @@ ls "$HOME/box-exec-proxy/proxy/exec-proxy" "$HOME/box-exec-proxy/spec/spec.json"
 
 ## An Anthropic API key
 
-Claude Code calls the Anthropic API with an API key. The acts are paid runs on that key. Each act page says what one run cost when it was measured; the most expensive measured run cost USD 0.2357 (act b3, see [Measurements](/results/measurements/)), and every headless run in this workshop carries a cap of USD 0.25. Interactive runs have no money cap in Claude Code.
+Claude Code calls the Anthropic API with an API key. The acts are paid runs on that key. Each act page says what one run cost when it was measured; the most expensive measured run cost USD 0.2357 (the tool-allowlist act, see [Measurements](/results/measurements/)), and every headless run in this workshop carries a cap of USD 0.25. Interactive runs have no money cap in Claude Code.
 
 You store the key in the keychain in [set-up](/start/setup/), and the check is there. Whether the key works shows at the first real run; the free checks deliberately use an invalid key.
 
@@ -223,8 +223,8 @@ The workshop uses two tokens with nearly the same permissions:
 
 | Token | Used for | Permissions |
 |---|---|---|
-| The **MCP token** (`box-poc-mcp` in the worked example) | Cloudflare's remote MCP server, in acts a to b3-args | Workers Scripts Write, Workers Tail Read, Workers Observability Read, Workers Observability Write, D1 Write, Workers KV Storage Write, Account Settings Read, **User Details Read** |
-| The **agent token** (`box-poc-agent`) | Direct calls to the Cloudflare API from inside the box, in act c | The same list without User Details Read |
+| The **MCP token** (`box-poc-mcp` in the worked example) | Cloudflare's remote MCP server, in the first five acts | Workers Scripts Write, Workers Tail Read, Workers Observability Read, Workers Observability Write, D1 Write, Workers KV Storage Write, Account Settings Read, **User Details Read** |
+| The **agent token** (`box-poc-agent`) | Direct calls to the Cloudflare API from inside the box, in the request-rules act | The same list without User Details Read |
 
 Both are restricted to the one account. In the worked example they expire on 2026-12-13.
 
@@ -240,7 +240,7 @@ A third token exists in the worked example, a deploy token for the app's owner. 
 
 ### Check
 
-You store both tokens in the keychain in [set-up](/start/setup/). The MCP token is checked by act a's free check: Claude Code reports the server as `"status":"connected"` only if the server accepted the token. The agent token is first used in act c; no separate check was written for it.
+You store both tokens in the keychain in [set-up](/start/setup/). The MCP token is checked by the token-scope act's free check: Claude Code reports the server as `"status":"connected"` only if the server accepted the token. The agent token is first used in the request-rules act; no separate check was written for it.
 
 <ReadMore href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/" source="Cloudflare docs">Create an API token</ReadMore>
 
@@ -248,7 +248,7 @@ You store both tokens in the keychain in [set-up](/start/setup/). The MCP token 
 
 The tasks read the Worker `box-poc-workshop` of [the sample app](/start/the-sample-app/): its list entry and its deployments. Its source is in [box-exec-proxy/sample-app](https://github.com/so0k/box-exec-proxy/tree/main/sample-app). You need the app, or a Worker of your own in its place, only to run the acts yourself. You can follow every explanation without it. This site does not teach how to deploy it.
 
-The check is act a's allowed task: its answer lists the Workers on the account, and yours should be among them.
+The check is the token-scope act's allowed task: its answer lists the Workers on the account, and yours should be among them.
 
 ## The account id in the examples
 
@@ -256,19 +256,19 @@ The worked example uses the Cloudflare account id `0123456789abcdef0123456789abc
 
 | Where | What to change | First appears in |
 |---|---|---|
-| The two task sentences, and the steering sentences of Part 4 | The account id and the Worker name | [Act a](/part-1/act-a/) |
-| The argument rule of act b3-args | The account id the rule allows | [Act b3-args](/part-4/act-b3-args/) |
+| The two task sentences, and the steering sentences of Part 4 | The account id and the Worker name | [The token-scope act](/part-1/token-scope/) |
+| The argument rule of the argument-rules act | The account id the rule allows | [The argument-rules act](/part-4/argument-rules/) |
 | The profile's `CLOUDFLARE_ACCOUNT_ID` for the local exec proxy | The account id | [The local exec proxy](/part-5/local-execute/) |
-| The network rules of act c | The account id and the Worker name in the two allowed paths | [Network rules](/part-5/egress-policy/) |
+| The network rules of the request-rules act | The account id and the Worker name in the two allowed paths | [Network rules](/part-5/egress-policy/) |
 
-The act b3-args task also names a second, made-up account id (`fedcba9876543210fedcba9876543210`) on purpose; leave it as it is.
+The argument-rules task also names a second, made-up account id (`fedcba9876543210fedcba9876543210`) on purpose; leave it as it is.
 
 <Aside type="note" title="Not checked">
 
 - Any macOS version other than 26.7.1, any Intel Mac, any Claude Code version other than 2.1.330, any Node other than 22.23.4.
 - Paths other than the ones above (`~/box-build`, `~/.local/bin/claude`, `~/box-exec-proxy`). The site's own runs used other folders on the same machine.
 - Running the acts on an account other than the worked example's.
-- A separate check of the agent token before act c.
+- A separate check of the agent token before the request-rules act.
 
 </Aside>
 
@@ -281,6 +281,6 @@ The act b3-args task also names a second, made-up account id (`fedcba9876543210f
 
 ## Read more
 
-<ReadMore href="https://github.com/strands-agents/box/blob/main/docs/cli/getting-started.md" source="Box docs">Get started with the box CLI and Claude Code</ReadMore>
+<ReadMore href="https://strandsagents.com/docs/user-guide/box/quickstart/" source="Box docs">Get started with the box CLI and Claude Code</ReadMore>
 <ReadMore href="https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/" source="Cloudflare docs">Cloudflare's own MCP servers</ReadMore>
 <ReadMore href="/results/builds-and-gaps/" source="This workshop">Builds and gaps</ReadMore>
